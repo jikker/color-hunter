@@ -939,7 +939,7 @@
  *     全新後端 Sheet「顏色獵人排行榜」與 HMAC 密鑰；保留 67 獵人的四難度（格數）、雲端排行榜、捏合縮放、A4 列印、雙語、音效/音樂/語音開關。
  */
 
-const APP_VERSION = 'v11';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v11：粉色與紅色太接近 → 淘汰「粉 Pink」改為「青 Cyan」(ink #0891b2、補滿 hex #a3dde3，填補綠↔藍色相空檔且與紅明顯區隔)；「棕 Brown」中文字改顯示「咖」(英文仍 Brown，ink/hex 不變)。v10：格內文字一律正向不旋轉（移除細長格沿軸旋轉、字級改一律以內切半徑 r 為準防溢出，用戶要求正常文字角度）。v9：報色語音改非同步 setTimeout(0)+650ms 節流+播放中略過、不再每次 cancel，修手機/WebView 快速連點卡頓。v8：黃色 ink 改正黃 #FFD400（原 #ca8a04 偏褐）；左上角 HUD 目標色詞偏暗（如黑）時補白色外框防隱沒於深色 HUD 條；格內亮色文字（正黃）白底加深色細外框防看不清。v7：左上角 HUD 目標顏色詞改用「該顏色本身」顯示（colorInk），文字色與其代表的顏色一致（取代固定紫色），語言切換時同步。v6：點對的格子改用「正確鮮明色」(colorInk)補滿，不再用淡粉 hex（修正辨識紅卻變粉/灰白的問題），文字色依新底色明暗重算。v5：格內文字儘量放大（多邊形 r*1.1→1.35/cap 9→11、圓格 c.r*0.62→0.82/cap 14→16）＋字重 700→800 加粗強調；英文長字以較強縮放(3→2.6/len)防橫向溢出；切語言時依新字數重算字級(fsBase)。v4：玩法改成「看文字的顏色」(inkKey)——聽語音念色→點出「文字顏色」就是該色的格(字寫什麼別管)→底色補滿成那個顏色→全部對上過關；點對時不再跳成功 toast(HUD 只用於按錯提醒)。v3：開局每格白底＋文字顏色≠字義(Stroop)→點文字寫該色的格(舊版按字義)；修正失焦時背景音樂未暫停
+const APP_VERSION = 'v12';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v12：每格文字底下加一個「該文字 ink 色」的圓圈把字包起來（黃字＝黃底圓圈）、文字改 ink 色字＋白色外框（白邊）疊在同色圓圈上仍清晰（取代 v8 白底深色外框）；圓圈半徑依字級／字數估算貼合文字、上限為格子內切半徑不溢出、切語言時同步重算。v11：粉色與紅色太接近 → 淘汰「粉 Pink」改為「青 Cyan」(ink #0891b2、補滿 hex #a3dde3，填補綠↔藍色相空檔且與紅明顯區隔)；「棕 Brown」中文字改顯示「咖」(英文仍 Brown，ink/hex 不變)。v10：格內文字一律正向不旋轉（移除細長格沿軸旋轉、字級改一律以內切半徑 r 為準防溢出，用戶要求正常文字角度）。v9：報色語音改非同步 setTimeout(0)+650ms 節流+播放中略過、不再每次 cancel，修手機/WebView 快速連點卡頓。v8：黃色 ink 改正黃 #FFD400（原 #ca8a04 偏褐）；左上角 HUD 目標色詞偏暗（如黑）時補白色外框防隱沒於深色 HUD 條；格內亮色文字（正黃）白底加深色細外框防看不清。v7：左上角 HUD 目標顏色詞改用「該顏色本身」顯示（colorInk），文字色與其代表的顏色一致（取代固定紫色），語言切換時同步。v6：點對的格子改用「正確鮮明色」(colorInk)補滿，不再用淡粉 hex（修正辨識紅卻變粉/灰白的問題），文字色依新底色明暗重算。v5：格內文字儘量放大（多邊形 r*1.1→1.35/cap 9→11、圓格 c.r*0.62→0.82/cap 14→16）＋字重 700→800 加粗強調；英文長字以較強縮放(3→2.6/len)防橫向溢出；切語言時依新字數重算字級(fsBase)。v4：玩法改成「看文字的顏色」(inkKey)——聽語音念色→點出「文字顏色」就是該色的格(字寫什麼別管)→底色補滿成那個顏色→全部對上過關；點對時不再跳成功 toast(HUD 只用於按錯提醒)。v3：開局每格白底＋文字顏色≠字義(Stroop)→點文字寫該色的格(舊版按字義)；修正失焦時背景音樂未暫停
 const W = 210, H = 297;     // A4 mm
 // 總格數（圓形 + 多邊形）：新手 25 格(1-25)、簡單 50 格(1-50)、普通 75 格(1-75)、困難 100 格(1-100)。
 // 新手/簡單模式格子更大更好點，手機族群尤其受用；難度記在 localStorage，重進沿用。
@@ -1259,7 +1259,10 @@ function applyBoardWordLang() {
       const label = colorWord(r.wordKey);
       r.text.textContent = label;
       const fb = parseFloat(r.text.dataset.fsBase);   // 隨新字數重算字級（中→英變長時縮小，防溢出）
-      if (fb) r.text.setAttribute('font-size', (fb * Math.min(1, 2.6 / Math.max(2, label.length))).toFixed(2));
+      let fs = parseFloat(r.text.getAttribute('font-size')) || fb || 8;
+      if (fb) { fs = fb * Math.min(1, 2.6 / Math.max(2, label.length)); r.text.setAttribute('font-size', fs.toFixed(2)); }
+      if (r.token) r.token.setAttribute('r', tokenRadiusFor(fs, label, r.tokenMaxR).toFixed(2));  // v12：圓圈隨字級重算
+      if (!r.found) applyTokenTextEdge(r.text, fs);   // v12：未對上的格重算白邊寬度（已對上的保留對上樣式）
     }
   }
 }
@@ -1757,6 +1760,10 @@ function draw() {
     const label = colorWord(spec.wordKey);
     const fsBase = fontSize;                                  // 幾何基準字級（未套長度縮放）；供切語言時重算
     fontSize *= Math.min(1, 2.6 / Math.max(2, label.length)); // 中文 1 字不縮，英文多字按長度縮（防橫向溢出）
+    const inkHex = colorInk(spec.inkKey);
+    const tokMaxR = r * 0.98;                                 // v12：圓圈上限＝格子內切半徑，不溢出鄰格
+    const token = makeColorToken(NS, c[0], c[1], tokenRadiusFor(fontSize, label, tokMaxR), inkHex);
+    svg.appendChild(token);                                   // 圓圈先畫（疊在白底格之上、文字之下）
     const text = document.createElementNS(NS, 'text');
     text.dataset.fsBase = fsBase.toFixed(3);
     text.setAttribute('x', c[0].toFixed(2));
@@ -1766,8 +1773,8 @@ function draw() {
     text.setAttribute('dominant-baseline', 'central');
     text.setAttribute('font-family', FONT_STACK);
     text.setAttribute('font-weight', '800');
-    text.setAttribute('fill', colorInk(spec.inkKey));   // v3：文字用鮮明的 inkKey 色（≠字義）＝Stroop
-    applyInkLegibility(text, colorInk(spec.inkKey));    // v8：亮色（正黃）白底加深色外框防看不清
+    text.setAttribute('fill', inkHex);                  // v3：文字用鮮明的 inkKey 色（≠字義）＝Stroop
+    applyTokenTextEdge(text, fontSize);                 // v12：ink 字＋白邊，疊在同色圓圈上仍清晰
     text.textContent = label;
     polyEls[pi].dataset.target = spec.isTarget ? '1' : '';
     text.dataset.wordKey = spec.wordKey;
@@ -1788,6 +1795,8 @@ function draw() {
       center: c,
       area: polygonArea(cell.labelPoly),
       touchRadius: r,
+      token,                       // v12：該格的顏色圓圈
+      tokenMaxR: tokMaxR,          // v12：切語言重算圓圈時的半徑上限
       neighbors: []
     };
     regions.push(region);
@@ -1801,6 +1810,10 @@ function draw() {
     let fontSize = Math.min(16, c.r * 0.82);                  // 圓格文字放大（受半徑限制不溢出）
     const fsBase = fontSize;                                  // 幾何基準字級；供切語言時重算
     fontSize *= Math.min(1, 2.6 / Math.max(2, label.length));
+    const inkHex = colorInk(spec.inkKey);
+    const tokMaxR = c.r * 0.96;                               // v12：圓圈上限＝圓格半徑（留白邊框）
+    const token = makeColorToken(NS, c.x, c.y, tokenRadiusFor(fontSize, label, tokMaxR), inkHex);
+    svg.appendChild(token);                                   // 圓圈先畫（疊在白底圓格之上、文字之下）
     const text = document.createElementNS(NS, 'text');
     text.dataset.fsBase = fsBase.toFixed(3);
     text.setAttribute('x', c.x.toFixed(2));
@@ -1810,8 +1823,8 @@ function draw() {
     text.setAttribute('dominant-baseline', 'central');
     text.setAttribute('font-family', FONT_STACK);
     text.setAttribute('font-weight', '800');
-    text.setAttribute('fill', colorInk(spec.inkKey));   // v3：文字用鮮明的 inkKey 色（≠字義）＝Stroop
-    applyInkLegibility(text, colorInk(spec.inkKey));    // v8：亮色（正黃）白底加深色外框防看不清
+    text.setAttribute('fill', inkHex);                  // v3：文字用鮮明的 inkKey 色（≠字義）＝Stroop
+    applyTokenTextEdge(text, fontSize);                 // v12：ink 字＋白邊，疊在同色圓圈上仍清晰
     text.textContent = label;
     circEls[ci].dataset.target = spec.isTarget ? '1' : '';
     text.dataset.wordKey = spec.wordKey;
@@ -1831,6 +1844,8 @@ function draw() {
       center: [c.x, c.y],
       area: Math.PI * c.r * c.r,
       touchRadius: c.r,
+      token,                       // v12：該圓格的顏色圓圈
+      tokenMaxR: tokMaxR,          // v12：切語言重算圓圈時的半徑上限
       neighbors: []
     };
     regions.push(region);
@@ -2107,14 +2122,37 @@ function contrastText(hexColor) {
 }
 // 字色依底色明暗自動切換（深底白字、亮底黑字）——確保「文字」本身一定看得清，被測的是「底色」。
 function inkFor(key) { return contrastText(colorHex(key)); }
-// 開局格子白底：亮色文字（如正黃 #FFD400）在白底上會看不清→補一圈深色細外框；深色文字維持乾淨無框。
-function applyInkLegibility(textEl, inkHex) {
-  if (contrastText(inkHex) === '#111827') {   // ink 偏亮 → 白底需要深色描邊
-    textEl.setAttribute('paint-order', 'stroke');
-    textEl.setAttribute('stroke', '#111827');
-    textEl.setAttribute('stroke-width', '0.5');
-    textEl.setAttribute('stroke-linejoin', 'round');
-  }
+// v12：每格文字底下放一個「該文字 ink 色」的圓圈把字包起來（黃字＝黃底圓圈）。
+// 半徑依字級與字數估算貼合文字、再以格子內切半徑為上限避免溢出鄰格。
+function tokenRadiusFor(fontSize, label, maxR) {
+  const isCJK = /[㐀-鿿]/.test(label);
+  const adv = isCJK ? 1.0 : 0.6;                       // 每字平均寬度比（中文方塊較寬、英文較窄）
+  const halfW = fontSize * label.length * adv / 2;
+  const halfH = fontSize * 0.62;
+  let rad = Math.hypot(halfW, halfH) * 1.15;           // 文字外接半徑 + 些許留白
+  rad = Math.max(rad, fontSize * 0.85);                // 下限：至少是個小圓
+  if (maxR) rad = Math.min(rad, maxR);                 // 上限：不超出格子內切圓
+  return rad;
+}
+// v12：建立顏色圓圈（ink 底）。放在文字底下、各格底色之上。
+function makeColorToken(NS, cx, cy, radius, inkHex) {
+  const t = document.createElementNS(NS, 'circle');
+  t.setAttribute('cx', cx.toFixed(2));
+  t.setAttribute('cy', cy.toFixed(2));
+  t.setAttribute('r', radius.toFixed(2));
+  t.setAttribute('fill', inkHex);
+  t.setAttribute('stroke', 'rgba(0,0,0,0.18)');        // 細微深色描邊：亮色圓圈（如黃）在白格上也看得出邊界
+  t.setAttribute('stroke-width', '0.4');
+  t.classList.add('color-token');
+  t.dataset.ink = inkHex;
+  return t;
+}
+// v12：文字本身維持 ink 色字 + 白色外框（白邊），疊在同色圓圈上仍清晰。
+function applyTokenTextEdge(textEl, fontSize) {
+  textEl.setAttribute('paint-order', 'stroke');
+  textEl.setAttribute('stroke', '#ffffff');
+  textEl.setAttribute('stroke-width', Math.max(0.6, fontSize * 0.16).toFixed(2));
+  textEl.setAttribute('stroke-linejoin', 'round');
 }
 // 排行榜依難度分開存：簡單(1–50)、普通(1–75)、困難(1–100) 各一份、各取前 20 名。
 const LB_KEY_BASE = 'colorhunter_leaderboard';   // 顏色獵人四難度各一份本機備援
@@ -2522,9 +2560,7 @@ function resetRegionStyle(r) {
   if (r.text) {
     r.text.setAttribute('fill', r.baseInk || '#111');
     r.text.removeAttribute('font-weight');
-    r.text.removeAttribute('stroke');
-    r.text.removeAttribute('stroke-width');
-    r.text.removeAttribute('paint-order');
+    applyTokenTextEdge(r.text, parseFloat(r.text.getAttribute('font-size')) || 8);  // v12：回復「ink 字＋白邊」開局樣式
   }
   r.found = false;
 }
