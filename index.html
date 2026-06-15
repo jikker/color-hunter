@@ -939,7 +939,7 @@
  *     全新後端 Sheet「顏色獵人排行榜」與 HMAC 密鑰；保留 67 獵人的四難度（格數）、雲端排行榜、捏合縮放、A4 列印、雙語、音效/音樂/語音開關。
  */
 
-const APP_VERSION = 'v8';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v8：黃色 ink 改正黃 #FFD400（原 #ca8a04 偏褐）；左上角 HUD 目標色詞偏暗（如黑）時補白色外框防隱沒於深色 HUD 條；格內亮色文字（正黃）白底加深色細外框防看不清。v7：左上角 HUD 目標顏色詞改用「該顏色本身」顯示（colorInk），文字色與其代表的顏色一致（取代固定紫色），語言切換時同步。v6：點對的格子改用「正確鮮明色」(colorInk)補滿，不再用淡粉 hex（修正辨識紅卻變粉/灰白的問題），文字色依新底色明暗重算。v5：格內文字儘量放大（多邊形 r*1.1→1.35/cap 9→11、圓格 c.r*0.62→0.82/cap 14→16）＋字重 700→800 加粗強調；英文長字以較強縮放(3→2.6/len)防橫向溢出；切語言時依新字數重算字級(fsBase)。v4：玩法改成「看文字的顏色」(inkKey)——聽語音念色→點出「文字顏色」就是該色的格(字寫什麼別管)→底色補滿成那個顏色→全部對上過關；點對時不再跳成功 toast(HUD 只用於按錯提醒)。v3：開局每格白底＋文字顏色≠字義(Stroop)→點文字寫該色的格(舊版按字義)；修正失焦時背景音樂未暫停
+const APP_VERSION = 'v10';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v10：格內文字一律正向不旋轉（移除細長格沿軸旋轉、字級改一律以內切半徑 r 為準防溢出，用戶要求正常文字角度）。v9：報色語音改非同步 setTimeout(0)+650ms 節流+播放中略過、不再每次 cancel，修手機/WebView 快速連點卡頓。v8：黃色 ink 改正黃 #FFD400（原 #ca8a04 偏褐）；左上角 HUD 目標色詞偏暗（如黑）時補白色外框防隱沒於深色 HUD 條；格內亮色文字（正黃）白底加深色細外框防看不清。v7：左上角 HUD 目標顏色詞改用「該顏色本身」顯示（colorInk），文字色與其代表的顏色一致（取代固定紫色），語言切換時同步。v6：點對的格子改用「正確鮮明色」(colorInk)補滿，不再用淡粉 hex（修正辨識紅卻變粉/灰白的問題），文字色依新底色明暗重算。v5：格內文字儘量放大（多邊形 r*1.1→1.35/cap 9→11、圓格 c.r*0.62→0.82/cap 14→16）＋字重 700→800 加粗強調；英文長字以較強縮放(3→2.6/len)防橫向溢出；切語言時依新字數重算字級(fsBase)。v4：玩法改成「看文字的顏色」(inkKey)——聽語音念色→點出「文字顏色」就是該色的格(字寫什麼別管)→底色補滿成那個顏色→全部對上過關；點對時不再跳成功 toast(HUD 只用於按錯提醒)。v3：開局每格白底＋文字顏色≠字義(Stroop)→點文字寫該色的格(舊版按字義)；修正失焦時背景音樂未暫停
 const W = 210, H = 297;     // A4 mm
 // 總格數（圓形 + 多邊形）：新手 25 格(1-25)、簡單 50 格(1-50)、普通 75 格(1-75)、困難 100 格(1-100)。
 // 新手/簡單模式格子更大更好點，手機族群尤其受用；難度記在 localStorage，重進沿用。
@@ -1750,10 +1750,8 @@ function draw() {
     const c = centroid(cell.labelPoly);
     const r = distToEdges(cell.labelPoly, c[0], c[1]);
     const axis = longestAxis(cell.labelPoly);
-    const slim = axis.len > 4.5 * r;          // 細長格
-    let fontSize = slim
-      ? Math.min(axis.len / 3.8, r * 1.85, 11)
-      : Math.min(11, r * 1.35);                               // 文字儘量放大（受內切半徑 r 限制，不超出格）
+    // 文字一律水平不旋轉（用戶要求正常角度）→ 字級一律以內切半徑 r 為準，確保正向也不會溢出細長格
+    let fontSize = Math.min(11, r * 1.35);
     fontSize = Math.max(3, fontSize);
     const spec = nums[k++];
     const label = colorWord(spec.wordKey);
@@ -1773,7 +1771,7 @@ function draw() {
     text.textContent = label;
     polyEls[pi].dataset.target = spec.isTarget ? '1' : '';
     text.dataset.wordKey = spec.wordKey;
-    setupNumberTextTransform(text, c[0], c[1], slim ? axis.angle : 0);
+    setupNumberTextTransform(text, c[0], c[1], 0);   // 文字一律正向、不依細長格軸旋轉（用戶要求正常文字角度）
     svg.appendChild(text);
     const region = {
       isTarget: spec.isTarget,
@@ -2370,6 +2368,8 @@ const Speech = {
   enabled: localStorage.getItem('colorhunter_speak') !== 'off',
   ok: 'speechSynthesis' in window,
   zhVoice: null,
+  pendingSpeak: false,    // 已排程一次非同步報色（避免在點擊 handler 內同步 speak 卡主執行緒）
+  lastSpeakAt: 0,         // 上次報色時間（節流用，手機/WebView 快速連點防卡頓）
   init() {
     if (!this.ok) {                               // 瀏覽器不支援 → 隱藏按鈕、不影響遊戲
       for (const id of ['speakBtn', 'hudSpeakBtn']) {
@@ -2390,15 +2390,23 @@ const Speech = {
   // key = 顏色 key（如 'blue'）；念出對應語言的顏色詞（如「藍」／"Blue"）。
   say(key) {
     if (!this.ok || !this.enabled || !key) return;
+    // 非同步＋節流＋播放中略過：不在點擊 handler 內同步 cancel()+speak()（手機/WebView 快速連點會拖住主執行緒）
+    const now = performance.now();
+    if (this.pendingSpeak || window.speechSynthesis.speaking || now - this.lastSpeakAt < 650) return;
+    this.pendingSpeak = true; this.lastSpeakAt = now;
     const word = colorWord(key);
-    try {
-      window.speechSynthesis.cancel();            // 蓋掉上一局殘留，避免排隊堆疊
-      const u = new SpeechSynthesisUtterance(String(word));
-      u.lang = currentLang === 'zh' ? 'zh-TW' : 'en-US';
-      if (currentLang === 'zh' && this.zhVoice) u.voice = this.zhVoice;
-      u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
-      window.speechSynthesis.speak(u);
-    } catch (e) {}
+    setTimeout(() => {
+      this.pendingSpeak = false;
+      if (!this.enabled) return;
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) return;
+      try {
+        const u = new SpeechSynthesisUtterance(String(word));
+        u.lang = currentLang === 'zh' ? 'zh-TW' : 'en-US';
+        if (currentLang === 'zh' && this.zhVoice) u.voice = this.zhVoice;
+        u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
+        window.speechSynthesis.speak(u);
+      } catch (e) {}
+    }, 0);
   },
   toggle() {
     this.enabled = !this.enabled;
