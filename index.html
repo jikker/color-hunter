@@ -939,7 +939,7 @@
  *     全新後端 Sheet「顏色獵人排行榜」與 HMAC 密鑰；保留 67 獵人的四難度（格數）、雲端排行榜、捏合縮放、A4 列印、雙語、音效/音樂/語音開關。
  */
 
-const APP_VERSION = 'v4';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v4：玩法改成「看文字的顏色」(inkKey)——聽語音念色→點出「文字顏色」就是該色的格(字寫什麼別管)→底色補滿成那個顏色→全部對上過關；點對時不再跳成功 toast(HUD 只用於按錯提醒)。v3：開局每格白底＋文字顏色≠字義(Stroop)→點文字寫該色的格(舊版按字義)；修正失焦時背景音樂未暫停
+const APP_VERSION = 'v5';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v5：格內文字儘量放大（多邊形 r*1.1→1.35/cap 9→11、圓格 c.r*0.62→0.82/cap 14→16）＋字重 700→800 加粗強調；英文長字以較強縮放(3→2.6/len)防橫向溢出；切語言時依新字數重算字級(fsBase)。v4：玩法改成「看文字的顏色」(inkKey)——聽語音念色→點出「文字顏色」就是該色的格(字寫什麼別管)→底色補滿成那個顏色→全部對上過關；點對時不再跳成功 toast(HUD 只用於按錯提醒)。v3：開局每格白底＋文字顏色≠字義(Stroop)→點文字寫該色的格(舊版按字義)；修正失焦時背景音樂未暫停
 const W = 210, H = 297;     // A4 mm
 // 總格數（圓形 + 多邊形）：新手 25 格(1-25)、簡單 50 格(1-50)、普通 75 格(1-75)、困難 100 格(1-100)。
 // 新手/簡單模式格子更大更好點，手機族群尤其受用；難度記在 localStorage，重進沿用。
@@ -1255,7 +1255,12 @@ function setLanguage(lang) {
 // 依目前語言重寫棋盤每格的顏色文字（保留字級／旋轉等其他屬性）。
 function applyBoardWordLang() {
   for (const r of regions) {
-    if (r && r.text && r.wordKey) r.text.textContent = colorWord(r.wordKey);
+    if (r && r.text && r.wordKey) {
+      const label = colorWord(r.wordKey);
+      r.text.textContent = label;
+      const fb = parseFloat(r.text.dataset.fsBase);   // 隨新字數重算字級（中→英變長時縮小，防溢出）
+      if (fb) r.text.setAttribute('font-size', (fb * Math.min(1, 2.6 / Math.max(2, label.length))).toFixed(2));
+    }
   }
 }
 function toggleLanguage() {
@@ -1747,20 +1752,22 @@ function draw() {
     const axis = longestAxis(cell.labelPoly);
     const slim = axis.len > 4.5 * r;          // 細長格
     let fontSize = slim
-      ? Math.min(axis.len / 4.5, r * 1.55, 9)
-      : Math.min(9, r * 1.1);
-    fontSize = Math.max(2.5, fontSize);
+      ? Math.min(axis.len / 3.8, r * 1.85, 11)
+      : Math.min(11, r * 1.35);                               // 文字儘量放大（受內切半徑 r 限制，不超出格）
+    fontSize = Math.max(3, fontSize);
     const spec = nums[k++];
     const label = colorWord(spec.wordKey);
-    fontSize *= Math.min(1, 3 / Math.max(2, label.length));   // 中文 1 字不縮，英文多字按長度縮
+    const fsBase = fontSize;                                  // 幾何基準字級（未套長度縮放）；供切語言時重算
+    fontSize *= Math.min(1, 2.6 / Math.max(2, label.length)); // 中文 1 字不縮，英文多字按長度縮（防橫向溢出）
     const text = document.createElementNS(NS, 'text');
+    text.dataset.fsBase = fsBase.toFixed(3);
     text.setAttribute('x', c[0].toFixed(2));
     text.setAttribute('y', c[1].toFixed(2));
     text.setAttribute('font-size', fontSize.toFixed(2));
     text.setAttribute('text-anchor', 'middle');
     text.setAttribute('dominant-baseline', 'central');
     text.setAttribute('font-family', FONT_STACK);
-    text.setAttribute('font-weight', '700');
+    text.setAttribute('font-weight', '800');
     text.setAttribute('fill', colorInk(spec.inkKey));   // v3：文字用鮮明的 inkKey 色（≠字義）＝Stroop
     text.textContent = label;
     polyEls[pi].dataset.target = spec.isTarget ? '1' : '';
@@ -1792,16 +1799,18 @@ function draw() {
   for (const c of model.circles) {
     const spec = nums[k++];
     const label = colorWord(spec.wordKey);
-    let fontSize = Math.min(14, c.r * 0.62);
-    fontSize *= Math.min(1, 3 / Math.max(2, label.length));
+    let fontSize = Math.min(16, c.r * 0.82);                  // 圓格文字放大（受半徑限制不溢出）
+    const fsBase = fontSize;                                  // 幾何基準字級；供切語言時重算
+    fontSize *= Math.min(1, 2.6 / Math.max(2, label.length));
     const text = document.createElementNS(NS, 'text');
+    text.dataset.fsBase = fsBase.toFixed(3);
     text.setAttribute('x', c.x.toFixed(2));
     text.setAttribute('y', c.y.toFixed(2));
     text.setAttribute('font-size', fontSize.toFixed(2));
     text.setAttribute('text-anchor', 'middle');
     text.setAttribute('dominant-baseline', 'central');
     text.setAttribute('font-family', FONT_STACK);
-    text.setAttribute('font-weight', '700');
+    text.setAttribute('font-weight', '800');
     text.setAttribute('fill', colorInk(spec.inkKey));   // v3：文字用鮮明的 inkKey 色（≠字義）＝Stroop
     text.textContent = label;
     circEls[ci].dataset.target = spec.isTarget ? '1' : '';
