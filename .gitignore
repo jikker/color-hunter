@@ -1,0 +1,4 @@
+# 測試產出（不上 git）
+_smoke*
+_test*
+*.tmp

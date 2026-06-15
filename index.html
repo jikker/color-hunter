@@ -1,0 +1,3098 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<!-- 禁止快取：強制每次載入都取最新 index.html，避免玩家停在舊版前端（舊簽章邏輯）導致上傳失敗 -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>顏色獵人</title>
+<!-- 顏色獵人 v1：favicon / App icon 為彩色格盤 + 放大鏡，?v1 強制更新被快取的舊圖示 -->
+<link rel="icon" type="image/png" sizes="180x180" href="icon-180.png?v1">
+<link rel="icon" type="image/png" sizes="512x512" href="app-icons/colorhunter-512.png?v1">
+<link rel="icon" type="image/svg+xml" href="icon.svg?v1">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png?v1">
+<style>
+  :root { color-scheme: light; --pending-hover: #d1d5db; }
+  * { box-sizing: border-box; }
+  /* ---- 手機優先：基準樣式就是手機版 ---- */
+  html { overscroll-behavior: none; }
+  body {
+    margin: 0;
+    background: #1e1b4b;
+    font-family: "Segoe UI", "Microsoft JhengHei", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    overscroll-behavior: none;
+  }
+  body.modal-open {
+    overflow: hidden;
+    touch-action: none;
+  }
+  .topbar {
+    width: 100%;
+    /* 留安全區：頂部避開瀏海/動態島，左右避開橫向時的圓角/相機 */
+    padding: calc(8px + env(safe-area-inset-top)) calc(58px + env(safe-area-inset-right)) 8px calc(12px + env(safe-area-inset-left));
+    background: #181538;
+    color: #f9fafb;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 10;
+  }
+  .topbar .logo { font-size: 18px; font-weight: 700; flex: 1; white-space: nowrap; min-width: 0; }
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ui-icon {
+    width: 1.15em;
+    height: 1.15em;
+    flex: none;
+    color: currentColor;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: -0.18em;
+  }
+  .ui-icon .fill { fill: currentColor; stroke: none; }
+  .ui-icon .soft { opacity: .45; }
+  .logo .ui-icon {
+    width: 24px;
+    height: 24px;
+    color: #a78bfa;
+    filter: drop-shadow(0 1px 4px rgba(251,191,36,.45));
+  }
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .48em;
+  }
+  button .ui-icon { font-size: 1.12em; }
+  .iconbtn .ui-icon,
+  .mini .ui-icon,
+  .zoomctl .ui-icon {
+    margin: 0;
+  }
+  .iconbtn .ui-icon { width: 19px; height: 19px; }
+  .iconbtn {
+    width: 38px; height: 38px; border: none; border-radius: 8px;
+    background: linear-gradient(180deg, #4b5563, #273244);
+    color: #fff; font-size: 17px; cursor: pointer;
+    flex: none;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.13), 0 1px 2px rgba(0,0,0,.3);
+  }
+  .iconbtn:hover { background: linear-gradient(180deg, #64748b, #334155); }
+  .iconbtn.off { opacity: .38; }
+  .langbtn {
+    position: fixed;
+    /* 安全區：跟頂部控制列一起避開瀏海/動態島，維持同一高度 */
+    top: calc(8px + env(safe-area-inset-top));
+    right: calc(10px + env(safe-area-inset-right));
+    z-index: 80;
+    width: 40px;
+    height: 38px;
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 8px;
+    background: linear-gradient(180deg, #4b5563, #273244);
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.13), 0 1px 2px rgba(0,0,0,.3);
+  }
+  .langbtn:hover { background: linear-gradient(180deg, #64748b, #334155); }
+  .menu {
+    position: fixed; top: 54px; right: 10px;
+    background: #181538; border-radius: 10px; padding: 6px;
+    display: flex; flex-direction: column; gap: 2px; z-index: 40;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  }
+  .menu button {
+    background: none; border: none; color: #f3f4f6; font-size: 15px;
+    padding: 10px 16px; text-align: left; border-radius: 8px; cursor: pointer;
+    white-space: nowrap;
+    justify-content: flex-start;
+  }
+  .menu button:hover { background: #374151; }
+  /* ---- 遊戲 HUD ---- */
+  .hud {
+    width: 100%;
+    padding: 8px 10px;
+    background: #111827;
+    color: #f9fafb;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    min-height: 58px;
+  }
+  .hud-main {
+    display: grid;
+    grid-template-columns: auto 58px 58px max-content 52px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 0;
+    white-space: nowrap;
+  }
+  .hud-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .hud .target-num {
+    font-size: 38px;
+    font-weight: 800;
+    color: #a78bfa;
+    width: 58px;
+    text-align: center;
+    line-height: 1;
+  }
+  .hud .stat {
+    font-size: 15px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: clip;
+  }
+  .hud .lives { color: #f87171; letter-spacing: 1px; font-size: 17px; overflow: visible; }
+  .hud button {
+    font-size: 13px; padding: 5px 12px; border: none; border-radius: 6px;
+    cursor: pointer; background: linear-gradient(180deg, #566174, #374151); color: #fff;
+    min-height: 32px;
+    flex: none;
+  }
+  .hud .mini {
+    width: 32px;
+    padding: 0;
+    font-size: 15px;
+    border-radius: 8px;
+  }
+  .hud-actions .mini { display: none; }
+  .hud .mini .ui-icon { width: 17px; height: 17px; }
+  .hud .mini.off { opacity: .38; }
+  .toast {
+    position: fixed; left: 50%; top: 64px; transform: translateX(-50%);
+    background: #b91c1c; color: #fff; padding: 10px 18px; border-radius: 8px;
+    font-size: 15px; z-index: 20; box-shadow: 0 4px 16px rgba(0,0,0,.4);
+    max-width: 92vw; text-align: center;
+  }
+  .toast.ok { background: #047857; }
+  .overlay {
+    position: fixed; inset: 0;
+    background:
+      linear-gradient(rgba(15,23,42,.84), rgba(15,23,42,.84)),
+      repeating-linear-gradient(0deg, transparent 0 17px, rgba(255,255,255,.06) 17px 18px),
+      repeating-linear-gradient(90deg, transparent 0 17px, rgba(255,255,255,.05) 17px 18px);
+    display: flex; align-items: center; justify-content: center; z-index: 50;
+    touch-action: none;
+    overscroll-behavior: contain;
+    padding: 18px;
+  }
+  .overlay .panel {
+    position: relative;
+    background: #fffaf0; color: #172033; border-radius: 18px;
+    border: 2px solid #111827;
+    padding: 24px; width: min(92vw, 460px); max-height: 86vh; overflow-y: auto;
+    box-shadow: 0 18px 0 rgba(17,24,39,.38), 0 30px 70px rgba(0,0,0,.58);
+    touch-action: pan-x pan-y;   /* 67-v1：允許水平平移，否則 pan-y 會限制子元素只能垂直、排行榜寬表格往右滑被擋 */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .overlay .panel::before {
+    content: "";
+    position: absolute;
+    inset: 9px;
+    border: 1px dashed rgba(17,24,39,.18);
+    border-radius: 12px;
+    pointer-events: none;
+  }
+  .panel h2 {
+    margin: 0 0 14px;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0;
+  }
+  .panel h2 .ui-icon { color: #7c3aed; width: 26px; height: 26px; }
+  /* 67-v1：排行榜標題只顯示「排行榜 · {模式}」（去掉數字範圍）並水平置中 */
+  .panel h2.lb-title { justify-content: center; }
+  .panel p { color: #374151; line-height: 1.65; margin: 9px 0; }
+  /* 排行榜前 20 名：容器限高、可上下捲動；表頭 sticky 釘在頂端（border-collapse:separate 才能讓 sticky 表頭穩定） */
+  /* 67-v1：垂直捲動交給外層 .panel；水平方向讓寬表格在此容器內捲（無高度限制→不會垂直巢狀捲動鎖死）。 */
+  .panel .lb-scroll { border-radius: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .panel .lb-scroll table { min-width: max-content; }   /* 表格依內容撐寬，超出面板寬度時可水平捲 */
+  .panel table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; background: #fff; }
+  .panel th, .panel td { padding: 7px 8px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
+  .panel th { background: #111827; color: #f9fafb; position: sticky; top: 0; z-index: 1; }
+  .panel .btn-row { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+  /* 開始畫面「排行榜｜開始遊戲｜玩法說明」：桌面三欄，窄螢幕可改直排避免英文溢出 */
+  .panel .btn-row.actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .panel .btn-row.actions button {
+    width: 100%; min-width: 0;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+    padding: 10px 8px; font-size: 14px; line-height: 1.15;
+  }
+  .panel .btn-row.actions .btn-label { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+  .panel .btn-row.actions .ui-icon { flex: none; }
+  .panel button {
+    font-size: 15px; font-weight: 800; padding: 10px 18px; border: 1px solid #111827; border-radius: 999px;
+    cursor: pointer; background: #7c3aed; color: #1f2937;
+    box-shadow: 0 4px 0 #111827;
+  }
+  .panel button.secondary { background: #e5e7eb; color: #111827; }
+  .panel button:active { transform: translateY(2px); box-shadow: 0 2px 0 #111827; }
+  .panel input[type=text] {
+    font-size: 15px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; width: 100%;
+  }
+  .intro-card {
+    display: grid;
+    gap: 10px;
+    margin: 14px 0 4px;
+  }
+  .intro-card .rule {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 10px 12px;
+  }
+  .intro-card .rule b {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #111827;
+    color: #a78bfa;
+    font-variant-numeric: tabular-nums;
+  }
+  .intro-card .rule span { color: #374151; line-height: 1.45; min-width: 0; }
+  .diff-label {
+    margin: 16px 0 7px;
+    font-size: 14px;
+    font-weight: 800;
+    color: #374151;
+  }
+  .diff-seg {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+  }
+  .diff-seg .diff {
+    width: 100%;
+    font-size: 14px;
+    font-weight: 800;
+    padding: 12px 4px;
+    border-radius: 12px;
+    border: 2px solid #d1d5db;
+    background: #fff;
+    color: #374151;
+    box-shadow: none;
+    cursor: pointer;
+  }
+  .diff-seg .diff:active { transform: none; box-shadow: none; }
+  .diff-seg .diff.on {
+    border-color: #111827;
+    background: #7c3aed;
+    color: #1f2937;
+    box-shadow: 0 3px 0 #111827;
+  }
+  .media-state {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin: 13px 0 0;
+  }
+  .media-state span,
+  .panel .media-state button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    padding: 5px 9px;
+    background: #fff;
+    color: #374151;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: none;
+    cursor: pointer;
+  }
+  .panel .media-state button:active { transform: none; box-shadow: none; }
+  /* 音效／音樂／報數開關：打開橘色、關閉白色（開始畫面設定列） */
+  .panel .media-state button.ms-sound.on,
+  .panel .media-state button.ms-music.on,
+  .panel .media-state button.ms-speak.on { background: #7c3aed; color: #1f2937; border-color: #7c3aed; }
+  /* 音效／音樂／報數開關（頂列 + 遊戲中 HUD）：打開橘色、關閉白色，與開始畫面一致 */
+  #soundBtn.on, #hudSoundBtn.on,
+  #musicBtn.on, #hudMusicBtn.on,
+  #speakBtn.on, #hudSpeakBtn.on { background: #7c3aed; color: #1f2937; opacity: 1; }
+  #soundBtn.on:hover, #hudSoundBtn.on:hover,
+  #musicBtn.on:hover, #hudMusicBtn.on:hover,
+  #speakBtn.on:hover, #hudSpeakBtn.on:hover { background: #a78bfa; }
+  #soundBtn.off, #hudSoundBtn.off,
+  #musicBtn.off, #hudMusicBtn.off,
+  #speakBtn.off, #hudSpeakBtn.off { background: #fff; color: #374151; opacity: 1; }
+  #soundBtn.off:hover, #hudSoundBtn.off:hover,
+  #musicBtn.off:hover, #hudMusicBtn.off:hover,
+  #speakBtn.off:hover, #hudSpeakBtn.off:hover { background: #f3f4f6; }
+  .panel .lb-note { font-size: 13px; color: #6b7280; margin: 8px 0; }
+  .panel .lb-note-hint { font-size: 12px; color: #2563eb; }
+  /* ---- 上傳失敗偵錯：雙擊失敗文字跳出的錯誤訊息對話框（疊在排行榜面板 z:50 之上） ---- */
+  .err-mask { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 60;
+    display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .err-box { background: #fff; border-radius: 14px; padding: 18px; width: min(560px, 100%);
+    box-shadow: 0 10px 40px rgba(0,0,0,.4); }
+  .err-box h3 { margin: 0 0 10px; font-size: 17px; color: #b91c1c; }
+  .err-box textarea { width: 100%; min-height: 160px; box-sizing: border-box; resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px;
+    line-height: 1.45; color: #111827; background: #f9fafb; border: 1px solid #d1d5db;
+    border-radius: 8px; padding: 10px; white-space: pre; overflow: auto; }
+  .err-box .err-btns { display: flex; gap: 10px; margin-top: 12px; }
+  .err-box .err-btns button { flex: 1; padding: 10px; border: 0; border-radius: 8px; cursor: pointer;
+    font-size: 15px; }
+  .err-box .err-copy { background: #2563eb; color: #fff; }
+  .err-box .err-close { background: #e5e7eb; color: #374151; }
+  .panel .credit { font-size: 12px; color: #6b7280; margin-top: 14px; line-height: 1.5; }
+  .panel .credit a { color: #1d4ed8; }
+  .panel .credit.ver { margin-top: 8px; text-align: right; color: #9ca3af; cursor: pointer; }
+  .panel .credit.ver:hover { color: #6b7280; text-decoration: underline; }
+  .start-panel .start-shell {
+    display: grid;
+    gap: 14px;
+  }
+  .start-panel .start-info,
+  .start-panel .start-controls {
+    min-width: 0;
+  }
+  .start-panel .start-controls {
+    display: grid;
+    align-content: start;
+  }
+  svg text { pointer-events: none; user-select: none; -webkit-user-select: none; }
+  body.gaming svg polygon, body.gaming svg circle { cursor: pointer; }
+  body.gaming svg .cell-shape:not(.found):hover { fill: var(--pending-hover); }
+  body.gaming svg .cell-shape.found {
+    cursor: default;
+    stroke: #16a34a;
+    stroke-width: 1.6;
+    filter: drop-shadow(0 0 2.5px rgba(22,163,74,.95));
+  }
+  [hidden] { display: none !important; }
+  /* ---- 棋盤（A4 紙）：手機滿版 ---- */
+  .sheet {
+    background: #fff;
+    margin: 8px 0 100px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.4);
+    width: calc(100vw - 8px);
+    max-width: calc(70.7dvh - 120px);
+    aspect-ratio: 210 / 297;
+    touch-action: manipulation;
+  }
+  body.gaming .sheet {
+    touch-action: none;   /* 遊戲中由自製捏合縮放/拖移接手 */
+  }
+  .icon-sprite {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  #paper { display: block; width: 100%; height: 100%; }
+  /* ---- 開始遊戲 CTA（遊戲優先的主按鈕） ---- */
+  .cta {
+    position: fixed; left: 0; right: 0; bottom: 16px;
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    z-index: 15; pointer-events: none;
+  }
+  .cta button {
+    pointer-events: auto;
+    font-size: 21px; font-weight: 700;
+    padding: 15px 46px; border: none; border-radius: 999px;
+    background: #7c3aed; color: #1f2937;
+    box-shadow: 0 6px 24px rgba(0,0,0,.5);
+    cursor: pointer;
+  }
+  .cta button .ui-icon {
+    width: 24px;
+    height: 24px;
+    stroke-width: 2.5;
+  }
+  .cta button:hover { background: #a78bfa; }
+  .cta .cta-hint { font-size: 12.5px; color: #f3f4f6; text-shadow: 0 1px 4px #000; }
+  body.gaming .cta { display: none; }
+  /* ---- 暫停模式：時間停止、棋盤霧化隱藏（HUD/計時仍清晰） ---- */
+  .pause-screen {
+    position: fixed; inset: 0; z-index: 4;   /* 蓋住棋盤(z:auto)、在 HUD(z:5)/topbar(z:10) 之下 */
+    background: rgba(243, 244, 246, .62);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none;
+  }
+  .pause-card {
+    background: rgba(31, 41, 55, .94); color: #f9fafb;
+    border-radius: 16px; padding: 26px 34px; text-align: center;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
+  }
+  .pause-card .pause-title {
+    font-size: 30px;
+    font-weight: 800;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+  }
+  .pause-card .pause-title .ui-icon { color: #a78bfa; width: 30px; height: 30px; }
+  .pause-card .pause-sub { font-size: 14px; color: #d1d5db; margin-bottom: 18px; }
+  .pause-card #resumeBtn {
+    font-size: 19px; font-weight: 700; padding: 13px 40px; border: none;
+    border-radius: 999px; background: #7c3aed; color: #1f2937; cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .4);
+  }
+  .pause-card #resumeBtn:hover { background: #a78bfa; }
+  body.paused .zoomctl { display: none; }   /* 暫停時收掉縮放鈕，避免它浮在霧化層上 */
+  /* ---- 縮放控制（手機字太小 → 捏合或按鈕放大） ---- */
+  .zoomctl {
+    position: fixed; right: 10px; bottom: 118px;
+    display: none; flex-direction: column; gap: 8px; z-index: 14;
+  }
+  body.gaming .zoomctl { display: flex; bottom: 16px; }
+  .zoomctl button {
+    width: 44px; height: 44px; border-radius: 50%; border: none;
+    background: rgba(31,41,55,.88); color: #fff; font-size: 19px;
+    cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,.4);
+  }
+  .zoomctl .ui-icon { width: 20px; height: 20px; }
+  .zoomctl button:hover { background: rgba(55,65,81,.95); }
+  /* 手機版保留初始畫面的頂欄與 HUD 尺寸，開始後只新增遊戲資訊。 */
+  @media (max-width: 767px) {
+    .topbar {
+      /* 手機：留安全區避開瀏海/動態島（這條 max-width:767px 規則才是手機實際生效的）*/
+      padding: calc(7px + env(safe-area-inset-top)) calc(42px + env(safe-area-inset-right)) 7px calc(8px + env(safe-area-inset-left));
+      gap: 4px;
+      overflow: hidden;
+    }
+    .topbar .logo {
+      flex: 0 1 auto;
+      max-width: clamp(58px, calc(100vw - 232px), 96px);
+      font-size: 16px;
+      gap: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .topbar .logo .ui-icon {
+      width: 21px;
+      height: 21px;
+    }
+    .iconbtn {
+      width: 32px;
+      height: 34px;
+      border-radius: 8px;
+    }
+    .iconbtn .ui-icon {
+      width: 18px;
+      height: 18px;
+    }
+    .langbtn {
+      right: calc(6px + env(safe-area-inset-right));
+      width: 34px;
+      height: 34px;
+      font-size: 18px;
+    }
+    .hud {
+      padding: 7px 8px;
+      gap: 5px;
+      min-height: 52px;
+    }
+    .hud-main {
+      grid-template-columns: 44px 52px max-content 38px;
+      justify-content: start;
+      gap: 5px;
+    }
+    .hud .target-label {
+      display: none;
+    }
+    .hud .target-num {
+      width: 44px;
+      font-size: 34px;
+    }
+    .hud .stat {
+      font-size: 14px;
+    }
+    .hud .lives {
+      font-size: 16px;
+    }
+    .hud-actions {
+      gap: 5px;
+    }
+    .hud button {
+      min-height: 32px;
+      padding: 4px 8px;
+      font-size: 13px;
+    }
+    #pauseBtn {
+      width: 42px;
+      padding-inline: 0;
+    }
+    #quitBtn {
+      min-width: 66px;
+    }
+    .overlay .panel {
+      width: calc(100vw - 64px);
+      max-width: 360px;
+      padding: 22px 24px;
+    }
+    .panel .btn-row.actions {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .panel .btn-row.actions button {
+      min-height: 44px;
+      padding-inline: 14px;
+    }
+    body.gaming .zoomctl {
+      left: 8px;
+      right: auto;
+      bottom: calc(env(safe-area-inset-bottom) + 8px);
+      flex-direction: row;
+      gap: 6px;
+    }
+    body.gaming .zoomctl button {
+      width: 36px;
+      height: 36px;
+      font-size: 15px;
+      background: rgba(17,24,39,.72);
+    }
+  }
+  @media (max-width: 360px) {
+    .topbar .logo-text {
+      display: none;
+    }
+    .topbar .logo {
+      max-width: 24px;
+    }
+    .hud-main {
+      grid-template-columns: 40px 50px max-content 34px;
+      gap: 4px;
+    }
+    .hud .target-num {
+      width: 40px;
+      font-size: 31px;
+    }
+    #quitBtn .btn-label {
+      display: none;
+    }
+    #quitBtn {
+      min-width: 38px;
+      padding-inline: 0;
+    }
+  }
+  /* 橫屏棋盤：小高度裝置與 PC 橫向視窗都把 A4 棋盤旋轉成橫向，避免直式紙被壓到太窄。 */
+  body.gaming.landscape-play {
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+    align-items: stretch;
+  }
+  body.gaming.landscape-play .topbar {
+    display: none;
+  }
+  body.gaming.landscape-play .hud {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--landscape-hud-w, 148px);
+    height: 100dvh;
+    min-height: 0;
+    padding: 6px;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    align-content: start;
+    gap: 6px;
+  }
+  body.gaming.landscape-play .hud-main {
+    grid-template-columns: 1fr 1fr;
+    justify-content: stretch;
+    gap: 4px;
+    white-space: normal;
+  }
+  body.gaming.landscape-play .hud .target-label,
+  body.gaming.landscape-play .hud .target-num {
+    grid-column: 1 / -1;
+  }
+  body.gaming.landscape-play .hud .target-label {
+    font-size: 13px;
+  }
+  body.gaming.landscape-play .hud .target-num {
+    width: auto;
+    font-size: clamp(30px, 9dvh, 42px);
+  }
+  body.gaming.landscape-play .hud .stat {
+    font-size: 13px;
+  }
+  body.gaming.landscape-play .hud .lives {
+    font-size: 15px;
+  }
+  body.gaming.landscape-play .hud-actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    align-content: end;
+    gap: 5px;
+  }
+  body.gaming.landscape-play .hud-actions .mini {
+    display: inline-flex;
+  }
+  body.gaming.landscape-play > .langbtn {
+    display: none;
+  }
+  body.gaming.landscape-play .hud button {
+    width: 100%;
+    min-height: 30px;
+    padding: 0 6px;
+    border-radius: 8px;
+  }
+  body.gaming.landscape-play #pauseBtn,
+  body.gaming.landscape-play #quitBtn {
+    grid-column: span 3;
+  }
+  body.gaming.landscape-play #quitBtn .btn-label {
+    display: inline;
+  }
+  body.landscape-play .sheet {
+    position: fixed;
+    left: var(--landscape-sheet-left, 156px);
+    top: var(--landscape-sheet-top, 8px);
+    width: var(--landscape-sheet-w, calc(100dvh - 16px));
+    max-width: none;
+    margin: 0;
+    transform-origin: top left;
+    transform: rotate(90deg) translateY(-100%);
+    z-index: 1;
+  }
+  body.gaming.landscape-play .zoomctl {
+    left: auto;
+    right: 8px;
+    bottom: 8px;
+    flex-direction: row;
+    z-index: 14;
+  }
+  body.gaming.landscape-play .toast {
+    left: calc(var(--landscape-hud-w, 148px) + (100dvw - var(--landscape-hud-w, 148px)) / 2);
+    top: 8px;
+  }
+  /* ---- 桌機加大 ---- */
+  @media (min-width: 768px) {
+    .topbar { padding: 10px 18px; }
+    .topbar .logo { font-size: 20px; }
+    .sheet { margin: 20px 0 110px; width: 92vw; max-width: calc(70.7vh - 141px); }
+    .hud .target-num { font-size: 42px; }
+  }
+  @media (min-width: 860px) and (hover: hover) and (pointer: fine),
+         (min-width: 900px) and (orientation: landscape) {
+    .overlay {
+      padding: 24px;
+    }
+    .overlay .panel.start-panel {
+      width: min(94vw, 980px);
+      max-height: min(86dvh, 680px);
+      padding: 24px 26px;
+    }
+    .start-panel .start-shell {
+      grid-template-columns: minmax(310px, .95fr) minmax(390px, 1.05fr);
+      gap: 22px;
+      align-items: stretch;
+    }
+    .start-panel h2 {
+      font-size: clamp(30px, 3.2vw, 42px);
+      margin-bottom: 18px;
+    }
+    .start-panel h2 .ui-icon {
+      width: 36px;
+      height: 36px;
+    }
+    .start-panel .intro-card {
+      margin: 0;
+      gap: 12px;
+    }
+    .start-panel .intro-card .rule {
+      grid-template-columns: 56px minmax(0, 1fr);
+      min-height: 86px;
+      padding: 14px 16px;
+      border-radius: 14px;
+    }
+    .start-panel .intro-card .rule b {
+      width: 56px;
+      height: 56px;
+      font-size: 22px;
+    }
+    .start-panel .intro-card .rule span {
+      font-size: clamp(17px, 1.45vw, 23px);
+      line-height: 1.35;
+    }
+    .start-panel .start-controls {
+      align-content: center;
+      gap: 12px;
+      padding-top: 4px;
+    }
+    .start-panel .diff-label {
+      margin: 0;
+      font-size: 17px;
+    }
+    .start-panel .diff-seg {
+      gap: 10px;
+    }
+    .start-panel .diff-seg .diff {
+      min-height: 70px;
+      padding: 11px 6px;
+      font-size: 18px;
+      line-height: 1.15;
+    }
+    .start-panel .btn-row.actions {
+      margin-top: 2px;
+    }
+    .start-panel .btn-row.actions button {
+      min-height: 50px;
+      font-size: 15px;
+    }
+    .start-panel .media-state {
+      justify-content: flex-start;
+      margin-top: 0;
+    }
+    .start-panel .credit.ver {
+      margin-top: 0;
+    }
+  }
+  @media print {
+    .topbar, .hud, .toast, .overlay, .cta, .zoomctl, .menu, .langbtn { display: none !important; }
+    body > *:not(.sheet) { display: none !important; }
+    body { background: #fff; }
+    .sheet {
+      display: block !important;
+      margin: 0;
+      box-shadow: none;
+      width: 210mm;
+      height: 297mm;
+      aspect-ratio: auto;
+    }
+    @page { size: A4 portrait; margin: 0; }
+  }
+</style>
+</head>
+<body>
+  <audio id="bgm" src="bgm.mp3?v7" loop preload="auto"></audio>
+<svg class="icon-sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="icon-target" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="12" r="3.2"></circle>
+    <path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path>
+  </symbol>
+  <symbol id="icon-music" viewBox="0 0 24 24">
+    <path d="M9 18V6l10-2v12"></path><circle cx="6.5" cy="18" r="3"></circle><circle cx="16.5" cy="16" r="3"></circle>
+  </symbol>
+  <symbol id="icon-sound" viewBox="0 0 24 24">
+    <path d="M4 10v4h4l5 4V6l-5 4H4Z"></path><path d="M16 9c1.1.8 1.8 1.8 1.8 3S17.1 14.2 16 15"></path><path d="M18.7 6.3c1.9 1.5 3 3.4 3 5.7s-1.1 4.2-3 5.7"></path>
+  </symbol>
+  <symbol id="icon-mute" viewBox="0 0 24 24">
+    <path d="M4 10v4h4l5 4V6l-5 4H4Z"></path><path d="M18 9l4 6M22 9l-4 6"></path>
+  </symbol>
+  <symbol id="icon-speak" viewBox="0 0 24 24">
+    <path d="M9 8.5L12.5 6V18"></path><path d="M8.8 18h7.4"></path>
+  </symbol>
+  <symbol id="icon-trophy" viewBox="0 0 24 24">
+    <path d="M8 4h8v4.8a4 4 0 0 1-8 0V4Z"></path><path d="M8 6H4v1.5a4 4 0 0 0 4 4M16 6h4v1.5a4 4 0 0 1-4 4"></path><path d="M12 13v5M8.5 21h7M10 18h4"></path>
+  </symbol>
+  <symbol id="icon-menu" viewBox="0 0 24 24">
+    <circle class="fill" cx="5" cy="12" r="1.7"></circle><circle class="fill" cx="12" cy="12" r="1.7"></circle><circle class="fill" cx="19" cy="12" r="1.7"></circle>
+  </symbol>
+  <symbol id="icon-shuffle" viewBox="0 0 24 24">
+    <path d="M3 7h3.5c4.5 0 5.3 10 10 10H21"></path><path d="M18 14l3 3-3 3"></path><path d="M3 17h3.5c1.7 0 2.8-1.3 3.7-3"></path><path d="M14 8c.7-.6 1.5-1 2.5-1H21"></path><path d="M18 4l3 3-3 3"></path>
+  </symbol>
+  <symbol id="icon-print" viewBox="0 0 24 24">
+    <path d="M7 8V3h10v5"></path><path d="M6 17H4.5A2.5 2.5 0 0 1 2 14.5V11a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v3.5a2.5 2.5 0 0 1-2.5 2.5H18"></path><path d="M7 14h10v7H7z"></path><circle class="fill" cx="18.5" cy="11.5" r="1"></circle>
+  </symbol>
+  <symbol id="icon-info" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><circle class="fill" cx="12" cy="7.2" r="1.2"></circle>
+  </symbol>
+  <symbol id="icon-pause" viewBox="0 0 24 24">
+    <path d="M8 5v14M16 5v14"></path>
+  </symbol>
+  <symbol id="icon-play" viewBox="0 0 24 24">
+    <path d="M8 5.5v13l11-6.5-11-6.5Z"></path>
+  </symbol>
+  <symbol id="icon-exit" viewBox="0 0 24 24">
+    <path d="M13 5H6v14h7"></path><path d="M10 12h11"></path><path d="M18 9l3 3-3 3"></path>
+  </symbol>
+  <symbol id="icon-zoom-in" viewBox="0 0 24 24">
+    <circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M10.5 7.5v6M7.5 10.5h6M15.5 15.5 21 21"></path>
+  </symbol>
+  <symbol id="icon-zoom-out" viewBox="0 0 24 24">
+    <circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M7.5 10.5h6M15.5 15.5 21 21"></path>
+  </symbol>
+  <symbol id="icon-fit" viewBox="0 0 24 24">
+    <path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4"></path><path d="M9 9h6v6H9z"></path>
+  </symbol>
+  <symbol id="icon-retry" viewBox="0 0 24 24">
+    <path d="M20 12a8 8 0 1 1-2.35-5.65"></path><path d="M20 4v6h-6"></path>
+  </symbol>
+  <symbol id="icon-save" viewBox="0 0 24 24">
+    <path d="M5 4h12l2 2v14H5V4Z"></path><path d="M8 4v6h8V4M8 20v-6h8v6"></path>
+  </symbol>
+  <symbol id="icon-close" viewBox="0 0 24 24">
+    <path d="M6 6l12 12M18 6 6 18"></path>
+  </symbol>
+</svg>
+<div class="topbar">
+  <span class="logo"><svg class="ui-icon"><use href="#icon-target"></use></svg><span class="logo-text">顏色獵人</span></span>
+  <button class="iconbtn" id="musicBtn" title="背景音樂開關" aria-label="背景音樂開關"><svg class="ui-icon"><use href="#icon-music"></use></svg></button>
+  <button class="iconbtn" id="soundBtn" title="音效開關" aria-label="音效開關"><svg class="ui-icon"><use href="#icon-sound"></use></svg></button>
+  <button class="iconbtn" id="speakBtn" title="報色開關" aria-label="報色開關"><svg class="ui-icon"><use href="#icon-speak"></use></svg></button>
+  <button class="iconbtn" id="lbBtn" title="排行榜" aria-label="排行榜"><svg class="ui-icon"><use href="#icon-trophy"></use></svg></button>
+  <button class="iconbtn" id="menuBtn" title="玩法說明" aria-label="玩法說明"><svg class="ui-icon"><use href="#icon-info"></use></svg></button>
+</div>
+<button class="langbtn" id="langBtn" type="button" title="切換語言" aria-label="切換語言">🇹🇼</button>
+<div class="menu" id="menu" hidden>
+  <button id="mReload" hidden><svg class="ui-icon"><use href="#icon-shuffle"></use></svg><span class="btn-label">重劃一張新棋盤</span></button>
+  <button id="mPrint" hidden><svg class="ui-icon"><use href="#icon-print"></use></svg><span class="btn-label">列印 A4 紙</span></button>
+  <button id="mAbout"><svg class="ui-icon"><use href="#icon-info"></use></svg><span class="btn-label">玩法說明 / 音樂版權</span></button>
+</div>
+<div class="hud" id="hud" hidden>
+  <div class="hud-main">
+    <span class="stat target-label">找出 →</span>
+    <span class="target-num" id="targetNum">–</span>
+    <span class="stat">⏱ <span id="timeDisp">0:00</span></span>
+    <span class="stat lives" id="livesDisp">♥♥♥</span>
+    <span class="stat" id="progDisp">0/100</span>
+  </div>
+  <div class="hud-actions">
+    <button class="mini" id="hudMusicBtn" title="背景音樂開關" aria-label="背景音樂開關"><svg class="ui-icon"><use href="#icon-music"></use></svg></button>
+    <button class="mini" id="hudSoundBtn" title="音效開關" aria-label="音效開關"><svg class="ui-icon"><use href="#icon-sound"></use></svg></button>
+    <button class="mini" id="hudSpeakBtn" title="報色開關" aria-label="報色開關"><svg class="ui-icon"><use href="#icon-speak"></use></svg></button>
+    <button class="mini" id="hudLbBtn" title="排行榜" aria-label="排行榜"><svg class="ui-icon"><use href="#icon-trophy"></use></svg></button>
+    <button class="mini" id="hudMenuBtn" title="玩法說明" aria-label="玩法說明"><svg class="ui-icon"><use href="#icon-info"></use></svg></button>
+    <button class="mini" id="hudLangBtn" title="切換語言" aria-label="切換語言">🇹🇼</button>
+    <button id="pauseBtn" title="暫停"><svg class="ui-icon"><use href="#icon-pause"></use></svg></button>
+    <button id="quitBtn"><svg class="ui-icon"><use href="#icon-exit"></use></svg><span class="btn-label">放棄</span></button>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<div class="overlay" id="overlay" hidden><div class="panel" id="panel"></div></div>
+<div class="sheet" id="sheet">
+  <svg id="paper" viewBox="0 0 210 297" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+<div class="pause-screen" id="pauseScreen" hidden>
+  <div class="pause-card">
+    <div class="pause-title"><svg class="ui-icon"><use href="#icon-pause"></use></svg>已暫停</div>
+    <div class="pause-sub">時間已停止 · 棋盤已隱藏</div>
+    <button id="resumeBtn"><svg class="ui-icon"><use href="#icon-play"></use></svg><span class="btn-label">繼續遊戲</span></button>
+  </div>
+</div>
+<div class="zoomctl">
+  <button id="zin" title="放大" aria-label="放大"><svg class="ui-icon"><use href="#icon-zoom-in"></use></svg></button>
+  <button id="zout" title="縮小" aria-label="縮小"><svg class="ui-icon"><use href="#icon-zoom-out"></use></svg></button>
+  <button id="zreset" title="回復原始大小" aria-label="回復原始大小"><svg class="ui-icon"><use href="#icon-fit"></use></svg></button>
+</div>
+<div class="cta" id="cta" hidden>
+  <button id="startBtn"><svg class="ui-icon"><use href="#icon-target"></use></svg><span class="btn-label">開始遊戲</span></button>
+  <div class="cta-hint">聽語音念出的顏色，找出「文字與底色對不上」的格！（可捏合放大）</div>
+</div>
+<script>
+'use strict';
+/*
+ * 顏色獵人（Color Hunter）— 由「67 獵人」(T-161，本身 fork 自「數字獵人」T-152) 改版的找色反應遊戲。
+ * 玩法：棋盤（A4 隨機 Voronoi 格）每格有「底色」與「顏色文字」。多數格底色＝文字（相符）；少數「目標格」
+ *       底色與文字對不上（例：底綠、字寫「藍」）。每局隨機選一個目標顏色詞、語音念出它，玩家要最快點出
+ *       所有「文字＝目標詞但底色不是該色」的格；另有「陷阱格」（文字＝目標詞且底色也＝該色，相符不可點），
+ *       逼玩家看底色而非只讀字。點錯（點到相符格）扣命，錯 3 次結束；找完全部目標格的用時越短排名越前。
+ * 版面生成沿用數字獵人：圓形格 + Voronoi 切割、群聚+均勻種子混合、細長格文字沿長軸旋轉、viewBox 以 mm 為單位（列印即 A4）。
+ *
+ * === 顏色獵人自身版本史（與 67 獵人 / 數字獵人各自獨立計算）===
+ * v1：由 67 獵人 fork——格子內容改為「底色 + 顏色文字」、目標改成找「底色與文字對不上」的格、語音改報目標顏色詞、
+ *     靛紫×深靛主題、字色依底色明暗自動切換、英文長字按字數縮放、namespace 化 localStorage（colorhunter_*）、
+ *     全新後端 Sheet「顏色獵人排行榜」與 HMAC 密鑰；保留 67 獵人的四難度（格數）、雲端排行榜、捏合縮放、A4 列印、雙語、音效/音樂/語音開關。
+ */
+
+const APP_VERSION = 'v1';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v1：fork 成找「底色與文字對不上」的格子
+const W = 210, H = 297;     // A4 mm
+// 總格數（圓形 + 多邊形）：新手 25 格(1-25)、簡單 50 格(1-50)、普通 75 格(1-75)、困難 100 格(1-100)。
+// 新手/簡單模式格子更大更好點，手機族群尤其受用；難度記在 localStorage，重進沿用。
+const MODE = { beginner: 25, easy: 50, normal: 75, hard: 100 };   // 新手 1–25、簡單 1–50、普通 1–75、困難 1–100
+function savedMode() { const m = localStorage.getItem('colorhunter_mode'); return MODE[m] ? m : 'normal'; }
+let N = MODE[savedMode()];
+const MARGIN = 6;           // 紙張外留白 mm
+
+const I18N = {
+  zh: {
+    htmlLang: 'zh-Hant',
+    flag: '🇹🇼',
+    switchTitle: '切換語言',
+    switchTo: 'Switch to English',
+    title: '顏色獵人',
+    musicToggle: '背景音樂開關',
+    soundToggle: '音效開關',
+    speakToggle: '報色開關',
+    leaderboard: '排行榜',
+    more: '更多功能',
+    redraw: '重劃一張新棋盤',
+    printA4: '列印 A4 紙',
+    aboutMenu: '玩法說明 / 音樂版權',
+    targetArrow: '找出 →',
+    paused: '已暫停',
+    pausedSub: '時間已停止 · 棋盤已隱藏',
+    pause: '暫停',
+    resume: '繼續',
+    resumeGame: '繼續遊戲',
+    quit: '放棄',
+    zoomIn: '放大',
+    zoomOut: '縮小',
+    zoomReset: '回復原始大小',
+    startGame: '開始遊戲',
+    ctaHint: '聽語音念出的顏色，在棋盤上找出「文字與底色對不上」的那幾格！（可捏合放大）',
+    musicOn: '背景音樂開啟',
+    musicOff: '背景音樂關閉',
+    soundOn: '音效開啟',
+    soundOff: '音效關閉',
+    speakOn: '報色開啟',
+    speakOnDesc: '報色開啟（念出目標顏色）',
+    speakOff: '報色關閉',
+    on: '開',
+    off: '關',
+    music: '音樂',
+    sound: '音效',
+    speak: '報色',
+    modeBeginner: '新手模式',
+    modeEasy: '簡單模式',
+    modeNormal: '普通模式',
+    modeHard: '困難模式',
+    modeBeginnerShort: '新手',
+    modeEasyShort: '簡單',
+    modeNormalShort: '普通',
+    modeHardShort: '困難',
+    wrongTap: '❌ 這格底色與「{wrong}」相符，不是要找的（再錯 {left} 次就結束）',
+    foundTarget: '✅ 找到 {found}/{total} 格，還剩 {remain} 格',
+    remainingTargets: '剩 {remain}/{total}',
+    foundStatsNone: '📊 每題耗時：尚未找到任何數字。',
+    foundStats: '📊 每題耗時：最快 <b>{fastSec}</b>（數字 {fastNum}），最慢 <b>{slowSec}</b>（數字 {slowNum}），平均 <b>{avgSec}</b>。',
+    secondsShort: '{value} 秒',
+    gameOver: '遊戲結束',
+    loseDetail: '錯了 3 次！最後點到「<b>{wrong}</b>」相符格，還有 <b>{remain}</b> 格沒找到。',
+    elapsedProgress: '⏱ 用時 {time}，完成 {found}/{total} 格。',
+    playAgain: '再玩一次',
+    leaveGame: '離開遊戲',
+    winTitle: '全部找到了！',
+    winDetail: '⏱ 你花了 <b>{time}</b> 找出全部 {targets} 格對不上的，錯誤 {errors} 次。',
+    leaveName: '留下名字進排行榜：',
+    namePlaceholder: '你的名字（最多 8 字）',
+    saveLeaderboard: '存入排行榜',
+    skipSave: '不存，回到開始',
+    unknownError: '未知錯誤',
+    noErrorObject: '未知錯誤（沒有錯誤物件）',
+    cloudErrorTitle: '⚠️ 雲端上傳錯誤訊息',
+    copyError: '複製錯誤訊息',
+    copied: '✅ 已複製',
+    close: '關閉',
+    player: '玩家',
+    localTime: '時間：',
+    noRecord: '還沒有紀錄，快來玩第一場！',
+    colRank: '#',
+    colName: '名字',
+    colTime: '時間',   // 顏色獵人：找出全部對不上格的用時（秒）
+    colSlow: '最慢找到',
+    colErrors: '錯誤',
+    colDate: '日期',
+    noValue: '-',
+    loadingCloud: '☁️ 雲端排行榜載入中…',
+    cloudOffline: '⚠️ 雲端排行榜連不上，先顯示本機紀錄',
+    uploading: '⏫ 成績上傳雲端中…',
+    uploadFailedLocal: '⚠️ 雲端上傳失敗，成績已存在本機',
+    uploadRanked: '🎉 {name} 衝上雲端第 {rank} 名！',
+    uploadNoRank: '這次沒進雲端前 20，再接再厲！',
+    backStart: '回到開始',
+    lbTitle: '排行榜 · {mode}',
+    aboutTitle: '顏色獵人 — 玩法',
+    about1: '按「開始遊戲」，計時立刻開始。',
+    about2: '每格有底色與一個顏色字。多數相符，少數「底色與字對不上」——把這些對不上的格全找出來！',
+    about3: '點錯（點到相符格）扣 1 條命，錯 3 次結束；越快找完排名越前。',
+    about4: '對不上的格可能藏在很小的格子裡；找到的會加上醒目的綠框，HUD 會顯示還剩幾格。',
+    about5: '字太小可兩指捏合放大，放大後單指拖移棋盤。',
+    about6: '右上選單可查看玩法說明與音樂版權。',
+    musicCredit: '背景音樂：HydroGene「8-bit Epic Space Shooter Music」（OpenGameArt，CC0）',
+    officialMusic: '官方音樂頁',
+    ccLicense: 'Creative Commons CC0',
+    privacyPolicy: '隱私權政策',
+    adConsent: '管理廣告同意',
+    version: '版本 {version}',
+    refreshTitle: '點我強制刷新頁面（抓最新版）',
+    startRule1: '在 {count} 格中找出全部 {targets} 格「底色與字對不上」的。',
+    startRule2: '計時進行，越快找完越好。',
+    startRule3: '有三次錯誤機會，錯 3 次結束。',
+    difficultyLabel: '選擇難度（格子越多越難找）',
+    howTo: '玩法說明'
+  },
+  en: {
+    htmlLang: 'en',
+    flag: '🇺🇸',
+    switchTitle: 'Switch language',
+    switchTo: '切換到中文',
+    title: 'Color Hunter',
+    musicToggle: 'Background music toggle',
+    soundToggle: 'Sound effects toggle',
+    speakToggle: 'Color callout toggle',
+    leaderboard: 'Leaderboard',
+    more: 'More',
+    redraw: 'Draw a new board',
+    printA4: 'Print A4 sheet',
+    aboutMenu: 'How to play / music credit',
+    targetArrow: 'Find →',
+    paused: 'Paused',
+    pausedSub: 'Timer stopped · board hidden',
+    pause: 'Pause',
+    resume: 'Resume',
+    resumeGame: 'Resume Game',
+    quit: 'Quit',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    zoomReset: 'Reset zoom',
+    startGame: 'Start Game',
+    ctaHint: 'Listen for the spoken color, then find the cells whose word and background color don’t match! Pinch to zoom.',
+    musicOn: 'Background music on',
+    musicOff: 'Background music off',
+    soundOn: 'Sound effects on',
+    soundOff: 'Sound effects off',
+    speakOn: 'Color callout on',
+    speakOnDesc: 'Color callout on (speaks the target color)',
+    speakOff: 'Color callout off',
+    on: 'On',
+    off: 'Off',
+    music: 'Music',
+    sound: 'Sound',
+    speak: 'Voice',
+    modeBeginner: 'Beginner',
+    modeEasy: 'Easy',
+    modeNormal: 'Normal',
+    modeHard: 'Hard',
+    modeBeginnerShort: 'Beginner',
+    modeEasyShort: 'Easy',
+    modeNormalShort: 'Normal',
+    modeHardShort: 'Hard',
+    wrongTap: '❌ That cell’s color matches “{wrong}”. Game over after {left} more mistake(s).',
+    foundTarget: '✅ Found {found}/{total}. {remain} left.',
+    remainingTargets: '{remain}/{total} left',
+    foundStatsNone: '📊 Per-number time: no numbers found yet.',
+    foundStats: '📊 Per-number time: fastest <b>{fastSec}</b> (number {fastNum}), slowest <b>{slowSec}</b> (number {slowNum}), average <b>{avgSec}</b>.',
+    secondsShort: '{value}s',
+    gameOver: 'Game Over',
+    loseDetail: 'Three mistakes. Last tap was a matching “<b>{wrong}</b>” cell; <b>{remain}</b> left to find.',
+    elapsedProgress: '⏱ Time {time}, completed {found}/{total} cells.',
+    playAgain: 'Play Again',
+    leaveGame: 'Leave Game',
+    winTitle: 'All Found!',
+    winDetail: '⏱ You found all {targets} mismatched cells in <b>{time}</b>, mistakes: {errors}.',
+    leaveName: 'Enter your name for the leaderboard:',
+    namePlaceholder: 'Your name (8 chars max)',
+    saveLeaderboard: 'Save Score',
+    skipSave: 'Skip and Start Over',
+    unknownError: 'Unknown error',
+    noErrorObject: 'Unknown error (no error object)',
+    cloudErrorTitle: '⚠️ Cloud Upload Error',
+    copyError: 'Copy Error',
+    copied: '✅ Copied',
+    close: 'Close',
+    player: 'Player',
+    localTime: 'Time: ',
+    noRecord: 'No records yet. Play the first round!',
+    colRank: '#',
+    colName: 'Name',
+    colTime: 'Time',
+    colSlow: 'Slowest',
+    colErrors: 'Mistakes',
+    colDate: 'Date',
+    noValue: '-',
+    loadingCloud: '☁️ Loading cloud leaderboard…',
+    cloudOffline: '⚠️ Cloud leaderboard unavailable. Showing local records.',
+    uploading: '⏫ Uploading score to cloud…',
+    uploadFailedLocal: '⚠️ Cloud upload failed. Score saved locally.',
+    uploadRanked: '🎉 {name} reached cloud rank #{rank}!',
+    uploadNoRank: 'Not in cloud top 20 this time. Keep trying!',
+    backStart: 'Back to Start',
+    lbTitle: 'Leaderboard · {mode}',
+    aboutTitle: 'Color Hunter — How to Play',
+    about1: 'Tap “Start Game”; the timer starts immediately.',
+    about2: 'Each cell has a background color and a color word. Most match; a few don’t — find every mismatched cell!',
+    about3: 'A wrong tap costs 1 life. Three mistakes end the game. Faster clears rank higher.',
+    about4: 'A found cell gets a bright green outline, and the HUD shows how many remain.',
+    about5: 'Pinch to zoom when numbers are small, then drag the board with one finger.',
+    about6: 'Use the top menu to view instructions and music credits.',
+    musicCredit: 'Music: “8-bit Epic Space Shooter Music” by HydroGene (OpenGameArt, CC0)',
+    officialMusic: 'Official music page',
+    ccLicense: 'Creative Commons CC0',
+    privacyPolicy: 'Privacy Policy',
+    adConsent: 'Manage ad consent',
+    version: 'Version {version}',
+    refreshTitle: 'Force refresh and load the latest version',
+    startRule1: 'Find all {targets} mismatched cells among {count}.',
+    startRule2: 'You are timed — clear them fast!',
+    startRule3: 'Three mistakes and the game is over.',
+    difficultyLabel: 'Choose difficulty (more cells = harder)',
+    howTo: 'How to Play'
+  }
+};
+
+function preferredLang() {
+  const saved = localStorage.getItem('colorhunter_lang');
+  if (saved === 'zh' || saved === 'en') return saved;
+  const langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
+  return langs.some(lang => /^zh/i.test(lang)) ? 'zh' : 'en';
+}
+let currentLang = preferredLang();
+let currentPanelRenderer = null;
+function t(key, vars) {
+  let s = (I18N[currentLang] && I18N[currentLang][key]) || I18N.zh[key] || key;
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) s = s.split('{' + k + '}').join(String(v));
+  }
+  return s;
+}
+
+function rand(a, b) { return a + Math.random() * (b - a); }
+function iconSvg(name) {
+  return '<svg class="ui-icon" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>';
+}
+function buttonHtml(icon, label) {
+  return iconSvg(icon) + '<span class="btn-label">' + label + '</span>';
+}
+function setButtonLabel(id, label, title) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  const labelEl = btn.querySelector('.btn-label');
+  if (labelEl) labelEl.textContent = label;
+  if (title) {
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
+  }
+}
+function updateStaticText() {
+  document.documentElement.lang = I18N[currentLang].htmlLang;
+  document.title = t('title');
+  const langBtn = document.getElementById('langBtn');
+  if (langBtn) {
+    langBtn.textContent = I18N[currentLang].flag;
+    langBtn.title = t('switchTo');
+    langBtn.setAttribute('aria-label', t('switchTo'));
+  }
+  const hudLangBtn = document.getElementById('hudLangBtn');
+  if (hudLangBtn) {
+    hudLangBtn.textContent = I18N[currentLang].flag;
+    hudLangBtn.title = t('switchTo');
+    hudLangBtn.setAttribute('aria-label', t('switchTo'));
+  }
+  const logo = document.querySelector('.topbar .logo');
+  if (logo) logo.innerHTML = iconSvg('target') + t('title');
+  setButtonLabel('mReload', t('redraw'));
+  setButtonLabel('mPrint', t('printA4'));
+  setButtonLabel('mAbout', t('aboutMenu'));
+  const targetLabel = document.querySelector('.target-label');
+  if (targetLabel) targetLabel.textContent = t('targetArrow');
+  const pauseTitle = document.querySelector('.pause-title');
+  if (pauseTitle) pauseTitle.innerHTML = iconSvg('pause') + t('paused');
+  const pauseSub = document.querySelector('.pause-sub');
+  if (pauseSub) pauseSub.textContent = t('pausedSub');
+  setButtonLabel('resumeBtn', t('resumeGame'));
+  setButtonLabel('quitBtn', t('quit'));
+  setButtonLabel('startBtn', t('startGame'));
+  const ctaHint = document.querySelector('.cta-hint');
+  if (ctaHint) ctaHint.textContent = t('ctaHint');
+  const titleMap = [
+    ['lbBtn', t('leaderboard')], ['hudLbBtn', t('leaderboard')],
+    ['menuBtn', t('howTo')], ['hudMenuBtn', t('howTo')],
+    ['zin', t('zoomIn')], ['zout', t('zoomOut')], ['zreset', t('zoomReset')]
+  ];
+  for (const [id, title] of titleMap) {
+    const el = document.getElementById(id);
+    if (el) { el.title = title; el.setAttribute('aria-label', title); }
+  }
+  if (Game && typeof Game.syncPauseBtn === 'function') Game.syncPauseBtn();
+  if (Music && typeof Music.refresh === 'function') Music.refresh();
+  if (typeof syncSoundButtons === 'function') syncSoundButtons();
+  if (Speech && typeof Speech.refresh === 'function') Speech.refresh();
+}
+function setLanguage(lang) {
+  if (lang !== 'zh' && lang !== 'en') return;
+  currentLang = lang;
+  localStorage.setItem('colorhunter_lang', lang);
+  updateStaticText();
+  applyBoardWordLang();         // 棋盤上的顏色文字隨語言切換更新（中⇄英），但「是否目標」不變
+  if (Game && Game.active && typeof Game.updateTargetDisplay === 'function') Game.updateTargetDisplay();
+  if (currentPanelRenderer && !document.getElementById('overlay').hidden) currentPanelRenderer();
+}
+// 依目前語言重寫棋盤每格的顏色文字（保留字級／旋轉等其他屬性）。
+function applyBoardWordLang() {
+  for (const r of regions) {
+    if (r && r.text && r.wordKey) r.text.textContent = colorWord(r.wordKey);
+  }
+}
+function toggleLanguage() {
+  setLanguage(currentLang === 'zh' ? 'en' : 'zh');
+}
+
+// ---------- 圓形格子 ----------
+function placeCircles() {
+  const K = 2 + Math.floor(Math.random() * 2);   // 2~3 個圓
+  const circles = [];
+  let guard = 0;
+  while (circles.length < K && guard++ < 800) {
+    const r = rand(13, 26);
+    const x = rand(MARGIN + r + 6, W - MARGIN - r - 6);
+    const y = rand(MARGIN + r + 6, H - MARGIN - r - 6);
+    if (circles.every(c => Math.hypot(c.x - x, c.y - y) > c.r + r + 14))
+      circles.push({ x, y, r });
+  }
+  return circles;
+}
+
+// ---------- 種子點：圓周圈 + 群聚 + 均勻，密度不均 → 格子大小懸殊 ----------
+function randomSites(circles) {
+  const count = N - circles.length;
+  const sites = [];
+  const inPaper = (x, y) =>
+    x > MARGIN + 1.5 && x < W - MARGIN - 1.5 &&
+    y > MARGIN + 1.5 && y < H - MARGIN - 1.5;
+  const ok = (x, y, minD) =>
+    inPaper(x, y) &&
+    circles.every(c => Math.hypot(c.x - x, c.y - y) > c.r + 3.2) &&
+    sites.every(s => Math.hypot(s[0] - x, s[1] - y) > minD);
+
+  // 1) 每個圓外圍一圈種子點 → 圓周長出放射狀碎片（仿參考圖）
+  //    環上種子數依總格數縮放：低難度(格少，如新手 25 格)時若每圈都放 9-14 顆，會把幾乎所有格子吃成
+  //    擠在圓邊的碎片、其餘空曠 → 圓邊數字互相重疊。限制圓周環最多吃 ~42% 格子，其餘留給散佈取樣。
+  const ringPerCircle = Math.max(3, Math.min(14, Math.floor(count * 0.42 / circles.length)));
+  for (const c of circles) {
+    const n = Math.min(Math.floor(rand(9, 14)), ringPerCircle);
+    const a0 = Math.random() * Math.PI * 2;
+    for (let i = 0; i < n && sites.length < count; i++) {
+      const a = a0 + i * (Math.PI * 2 / n) + rand(-0.18, 0.18);
+      const d = c.r + rand(3.5, 11);
+      const x = c.x + Math.cos(a) * d;
+      const y = c.y + Math.sin(a) * d;
+      if (ok(x, y, 3.0)) sites.push([x, y]);
+    }
+  }
+
+  // 2) 群聚中心：群聚附近密（小格）、遠處疏（大格）
+  const clusters = [];
+  const nc = 3 + Math.floor(Math.random() * 3);   // 3~5 群
+  for (let i = 0; i < nc; i++)
+    clusters.push([rand(MARGIN + 15, W - MARGIN - 15), rand(MARGIN + 15, H - MARGIN - 15), rand(8, 20)]);
+
+  let guard = 0;
+  while (sites.length < count && guard++ < 30000) {
+    let x, y;
+    if (Math.random() < 0.62) {       // 群聚取樣（Box-Muller 高斯）
+      const cl = clusters[Math.floor(Math.random() * clusters.length)];
+      const u = Math.random() || 1e-9, v = Math.random();
+      x = cl[0] + Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v) * cl[2];
+      y = cl[1] + Math.sqrt(-2 * Math.log(u)) * Math.sin(2 * Math.PI * v) * cl[2];
+    } else {                          // 均勻取樣
+      x = rand(MARGIN + 2, W - MARGIN - 2);
+      y = rand(MARGIN + 2, H - MARGIN - 2);
+    }
+    const minD = guard > 20000 ? 2.2 : 3.0;   // 擺不滿時放寬間距
+    if (ok(x, y, minD)) sites.push([x, y]);
+  }
+  return sites;
+}
+
+// ---------- Voronoi：對每個點用其餘點的垂直平分線裁切外框 ----------
+function clipHalfPlane(poly, a, b, c) {
+  // 保留 ax+by<=c 的一側（Sutherland–Hodgman）
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i], q = poly[(i + 1) % poly.length];
+    const dp = a * p[0] + b * p[1] - c;
+    const dq = a * q[0] + b * q[1] - c;
+    if (dp <= 0) out.push(p);
+    if ((dp < 0 && dq > 0) || (dp > 0 && dq < 0)) {
+      const t = dp / (dp - dq);
+      out.push([p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])]);
+    }
+  }
+  return out;
+}
+
+function voronoiCell(sites, i) {
+  let poly = [[MARGIN, MARGIN], [W - MARGIN, MARGIN], [W - MARGIN, H - MARGIN], [MARGIN, H - MARGIN]];
+  const [px, py] = sites[i];
+  for (let j = 0; j < sites.length && poly.length; j++) {
+    if (j === i) continue;
+    const [qx, qy] = sites[j];
+    const a = qx - px, b = qy - py;
+    const c = (qx * qx - px * px + qy * qy - py * py) / 2;
+    poly = clipHalfPlane(poly, a, b, c);
+  }
+  return poly;
+}
+
+// ---------- 幾何輔助 ----------
+function centroid(poly) {
+  let area = 0, cx = 0, cy = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % poly.length];
+    const cross = x1 * y2 - x2 * y1;
+    area += cross;
+    cx += (x1 + x2) * cross;
+    cy += (y1 + y2) * cross;
+  }
+  area /= 2;
+  if (Math.abs(area) < 1e-9) return poly[0];
+  return [cx / (6 * area), cy / (6 * area)];
+}
+
+function polygonArea(poly) {
+  let area = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % poly.length];
+    area += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(area / 2);
+}
+
+// 點到多邊形邊界的最短距離 → 決定字體大小上限
+function distToEdges(poly, cx, cy) {
+  let min = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % poly.length];
+    const dx = x2 - x1, dy = y2 - y1;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 ? ((cx - x1) * dx + (cy - y1) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    min = Math.min(min, Math.hypot(x1 + t * dx - cx, y1 + t * dy - cy));
+  }
+  return min;
+}
+
+function pointSegDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(ax + t * dx - px, ay + t * dy - py);
+}
+
+function segIntersects(a, b, c, d) {
+  const eps = 1e-6;
+  const cross = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const onSeg = (p, q, r) =>
+    Math.min(p[0], r[0]) - eps <= q[0] && q[0] <= Math.max(p[0], r[0]) + eps &&
+    Math.min(p[1], r[1]) - eps <= q[1] && q[1] <= Math.max(p[1], r[1]) + eps &&
+    Math.abs(cross(p, q, r)) <= eps;
+  const c1 = cross(a, b, c), c2 = cross(a, b, d), c3 = cross(c, d, a), c4 = cross(c, d, b);
+  if ((c1 > eps && c2 < -eps || c1 < -eps && c2 > eps) &&
+      (c3 > eps && c4 < -eps || c3 < -eps && c4 > eps)) return true;
+  return onSeg(a, c, b) || onSeg(a, d, b) || onSeg(c, a, d) || onSeg(c, b, d);
+}
+
+function segDist(a, b, c, d) {
+  if (segIntersects(a, b, c, d)) return 0;
+  return Math.min(
+    pointSegDist(a[0], a[1], c[0], c[1], d[0], d[1]),
+    pointSegDist(b[0], b[1], c[0], c[1], d[0], d[1]),
+    pointSegDist(c[0], c[1], a[0], a[1], b[0], b[1]),
+    pointSegDist(d[0], d[1], a[0], a[1], b[0], b[1])
+  );
+}
+
+function polyPolyDist(a, b) {
+  let best = Infinity;
+  for (let i = 0; i < a.length; i++) {
+    const a1 = a[i], a2 = a[(i + 1) % a.length];
+    for (let j = 0; j < b.length; j++) {
+      const b1 = b[j], b2 = b[(j + 1) % b.length];
+      best = Math.min(best, segDist(a1, a2, b1, b2));
+      if (best === 0) return 0;
+    }
+  }
+  return best;
+}
+
+function circlePolyDist(c, poly) {
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    best = Math.min(best, Math.abs(pointSegDist(c.x, c.y, a[0], a[1], b[0], b[1]) - c.r));
+  }
+  return best;
+}
+
+function regionDist(a, b) {
+  if (a.poly && b.poly) return polyPolyDist(a.poly, b.poly);
+  if (a.circle && b.circle)
+    return Math.max(0, Math.hypot(a.center[0] - b.center[0], a.center[1] - b.center[1]) - a.circle.r - b.circle.r);
+  return a.circle ? circlePolyDist(a.circle, b.poly) : circlePolyDist(b.circle, a.poly);
+}
+
+function pointInPoly(poly, x, y) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1];
+    const xj = poly[j][0], yj = poly[j][1];
+    const hit = ((yi > y) !== (yj > y)) &&
+      (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi);
+    if (hit) inside = !inside;
+  }
+  return inside;
+}
+
+function clientToSvgPoint(clientX, clientY) {
+  const svg = document.getElementById('paper');
+  if (isLandscapePlay()) {
+    const box = svg.viewBox.baseVal;
+    const f = sheetPointFractions(clientX, clientY);
+    return [box.x + f.x * box.width, box.y + f.y * box.height];
+  }
+  if (svg.createSVGPoint) {
+    const matrix = svg.getScreenCTM();
+    if (matrix) {
+      const pt = svg.createSVGPoint();
+      pt.x = clientX;
+      pt.y = clientY;
+      const p = pt.matrixTransform(matrix.inverse());
+      return [p.x, p.y];
+    }
+  }
+
+  // Some embedded mobile WebViews return null for getScreenCTM() on inline SVG.
+  // The board uses a plain viewBox, so rect + viewBox mapping is a reliable fallback.
+  const rect = svg.getBoundingClientRect();
+  if (!rect.width || !rect.height) return null;
+  const box = svg.viewBox.baseVal;
+  return [
+    box.x + (clientX - rect.left) / rect.width * box.width,
+    box.y + (clientY - rect.top) / rect.height * box.height
+  ];
+}
+
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
+}
+
+function isLandscapePlay() {
+  return document.body.classList.contains('gaming') && isLandscapeBoard();
+}
+
+function isLandscapeBoard() {
+  return document.body.classList.contains('landscape-play');
+}
+
+function sheetPointFractions(clientX, clientY) {
+  const sheet = document.getElementById('sheet');
+  const rect = sheet.getBoundingClientRect();
+  if (!rect.width || !rect.height) return { x: 0.5, y: 0.5 };
+  if (isLandscapePlay()) {
+    return {
+      x: clamp01((clientY - rect.top) / rect.height),
+      y: clamp01(1 - (clientX - rect.left) / rect.width)
+    };
+  }
+  return {
+    x: clamp01((clientX - rect.left) / rect.width),
+    y: clamp01((clientY - rect.top) / rect.height)
+  };
+}
+
+function regionFromSvgPoint(x, y) {
+  let nearest = null;
+  let nearestD = Infinity;
+  for (const r of regions) {
+    if (r.circle) {
+      const d = Math.hypot(x - r.center[0], y - r.center[1]);
+      if (d <= r.circle.r) return r;
+      if (d < nearestD) { nearest = r; nearestD = d; }
+    }
+  }
+  for (const r of regions) {
+    if (r.circle) continue;
+    const hp = r.hitPoly || r.poly;             // 整塊可見格子優先（涵蓋被圓裁掉前的完整多邊形）
+    if (hp && pointInPoly(hp, x, y)) return r;
+    const d = Math.hypot(x - r.center[0], y - r.center[1]);
+    if (d < nearestD) { nearest = r; nearestD = d; }
+  }
+  return nearestD <= 4.8 ? nearest : null;
+}
+
+function prepareRegionNeighbors() {
+  const areas = regions.map(r => r.area).sort((a, b) => a - b);
+  const medianArea = areas[Math.floor(areas.length / 2)] || 0;
+  for (const r of regions) {
+    r.neighbors = [];
+    r.smallTarget = r.touchRadius <= 6.2 || r.area <= medianArea * 0.58;
+  }
+  for (let i = 0; i < regions.length; i++) {
+    for (let j = i + 1; j < regions.length; j++) {
+      const a = regions[i], b = regions[j];
+      const cd = Math.hypot(a.center[0] - b.center[0], a.center[1] - b.center[1]);
+      const centerLimit = Math.min(18, Math.max(9, a.touchRadius + b.touchRadius + 5));
+      if (regionDist(a, b) <= 0.9 || cd <= centerLimit) {
+        a.neighbors.push(b);
+        b.neighbors.push(a);
+      }
+    }
+  }
+}
+
+// 最遠頂點對 → 長軸方向與長度（細長格判定 + 數字旋轉角）
+function longestAxis(poly) {
+  let best = 0, ax = 0;
+  for (let i = 0; i < poly.length; i++)
+    for (let j = i + 1; j < poly.length; j++) {
+      const d = Math.hypot(poly[j][0] - poly[i][0], poly[j][1] - poly[i][1]);
+      if (d > best) {
+        best = d;
+        ax = Math.atan2(poly[j][1] - poly[i][1], poly[j][0] - poly[i][0]) * 180 / Math.PI;
+      }
+    }
+  if (ax > 90) ax -= 180;          // 數字不倒立
+  if (ax <= -90) ax += 180;
+  return { len: best, angle: ax };
+}
+
+// ---------- 版面生成（圓 + 多邊形 = 100 格） ----------
+function generate() {
+  const circles = placeCircles();
+  const sites = randomSites(circles);
+  if (sites.length !== N - circles.length) return null;
+
+  const cells = [];
+  for (let i = 0; i < sites.length; i++) {
+    const poly = voronoiCell(sites, i);
+    if (poly.length < 3) return null;
+
+    // 數字擺放用的可見區域：被圓吃到的格子，用圓的切線半平面把被蓋住的部分裁掉
+    let lp = poly;
+    for (const c of circles) {
+      const eaten = lp.some(p => Math.hypot(p[0] - c.x, p[1] - c.y) < c.r) ||
+                    distToEdges(lp, c.x, c.y) < c.r;
+      if (!eaten) continue;
+      const dx = sites[i][0] - c.x, dy = sites[i][1] - c.y;
+      const dl = Math.hypot(dx, dy) || 1;
+      const ux = dx / dl, uy = dy / dl;
+      const tx = c.x + ux * c.r, ty = c.y + uy * c.r;
+      lp = clipHalfPlane(lp, -ux, -uy, -(tx * ux + ty * uy));
+      if (lp.length < 3) return null;   // 種子點幾乎貼著圓背面，重生整張
+    }
+    cells.push({ poly, labelPoly: lp });
+  }
+  return { circles, cells };
+}
+
+// 估算每個數字標示的中心與字級（與 draw() 內擺字邏輯一致），用來偵測標示是否互相重疊
+function labelMetrics(model) {
+  const labels = [];
+  for (const cell of model.cells) {
+    const c = centroid(cell.labelPoly);
+    const r = distToEdges(cell.labelPoly, c[0], c[1]);
+    const axis = longestAxis(cell.labelPoly);
+    const slim = axis.len > 4.5 * r;
+    let fs = slim ? Math.min(axis.len / 4.5, r * 1.55, 9) : Math.min(9, r * 1.1);
+    fs = Math.max(2.5, fs);
+    labels.push({ x: c[0], y: c[1], fs });
+  }
+  for (const c of model.circles) labels.push({ x: c.x, y: c.y, fs: Math.min(14, c.r * 0.62) });
+  return labels;
+}
+// 兩個標示中心距離若小於 (字級和)×0.6，視為會重疊（保守假設皆兩位數寬度）
+function hasLabelOverlap(model) {
+  const L = labelMetrics(model);
+  for (let i = 0; i < L.length; i++)
+    for (let j = i + 1; j < L.length; j++) {
+      const minDist = (L[i].fs + L[j].fs) * 0.6;
+      if (Math.hypot(L[i].x - L[j].x, L[i].y - L[j].y) < minDist) return true;
+    }
+  return false;
+}
+
+// 顏色獵人：本局隨機選一個「目標顏色詞」TARGET_KEY（語音會唸它）；棋盤多數格底色＝文字（相符），
+// 少數「目標格」文字＝目標詞但底色是別的顏色（對不上）——要找的就是這些；另放幾格「陷阱」
+// （文字＝目標詞且底色也＝目標色，相符、不可點），逼玩家看底色而非只讀字。回傳每格 spec 陣列。
+let TARGET_KEY = null;
+function targetCountFor(total) {
+  return Math.max(1, Math.round((Number(total) || 0) * 0.12));
+}
+function makeBoardCells() {
+  const tIdx = Math.floor(Math.random() * COLORS.length);
+  const target = COLORS[tIdx];
+  TARGET_KEY = target.key;
+  const cells = new Array(N).fill(null);
+  const slots = Array.from({ length: N }, (_, i) => i);
+  for (let i = slots.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = slots[i];
+    slots[i] = slots[j];
+    slots[j] = tmp;
+  }
+  const others = COLORS.filter(c => c.key !== target.key);
+  let p = 0;
+  const targetCount = Math.min(N, targetCountFor(N));
+  // 目標格：文字＝目標詞、底色＝非目標的隨機顏色（這就是「對不上」要找的格）
+  for (let i = 0; i < targetCount && p < N; i++) {
+    const wrong = others[Math.floor(Math.random() * others.length)];
+    cells[slots[p++]] = { fillKey: wrong.key, wordKey: target.key, isTarget: true };
+  }
+  // 陷阱格：文字＝目標詞、底色＝目標色（相符，不是目標，不可點）
+  const trapCount = Math.min(N - p, Math.max(1, Math.round(targetCount * 0.8)));
+  for (let i = 0; i < trapCount && p < N; i++) {
+    cells[slots[p++]] = { fillKey: target.key, wordKey: target.key, isTarget: false };
+  }
+  // 其餘格：底色與文字相符的隨機顏色（永遠不是「目標詞＋錯底色」，故不會誤成目標）
+  for (; p < N; p++) {
+    const c = COLORS[Math.floor(Math.random() * COLORS.length)];
+    cells[slots[p]] = { fillKey: c.key, wordKey: c.key, isTarget: false };
+  }
+  return cells;
+}
+// 相容舊呼叫點（draw）：回傳每格的 {fillKey, wordKey, isTarget} spec 陣列。
+function makeBoardNums() { return makeBoardCells(); }
+function shuffleNums() { return makeBoardCells(); }
+
+function applyNumberTextTransform(text) {
+  const cx = Number(text.dataset.cx || text.getAttribute('x') || 0);
+  const cy = Number(text.dataset.cy || text.getAttribute('y') || 0);
+  const base = Number(text.dataset.baseRotation || 0);
+  const angle = base + (isLandscapeBoard() ? -90 : 0);
+  if (Math.abs(angle) < 0.01) text.removeAttribute('transform');
+  else text.setAttribute('transform', 'rotate(' + angle.toFixed(1) + ' ' + cx.toFixed(2) + ' ' + cy.toFixed(2) + ')');
+}
+
+function setupNumberTextTransform(text, cx, cy, baseRotation = 0) {
+  text.dataset.cx = String(cx);
+  text.dataset.cy = String(cy);
+  text.dataset.baseRotation = String(baseRotation);
+  applyNumberTextTransform(text);
+}
+
+function applyBoardTextRotation() {
+  document.querySelectorAll('#paper text[data-num]').forEach(applyNumberTextTransform);
+}
+
+// ---------- 繪製 ----------
+function draw() {
+  regions.length = 0;
+  regionByNum.clear();
+  // 多試幾張，優先挑「數字標示不重疊」的版面；都不行才退而用第一張幾何合法版面（避免無限 reload）
+  let model = null, fallback = null;
+  for (let t = 0; t < 80 && !model; t++) {
+    const m = generate();
+    if (!m) continue;
+    if (!fallback) fallback = m;
+    if (!hasLabelOverlap(m)) model = m;
+  }
+  if (!model) model = fallback;
+  if (!model) { location.reload(); return; }
+
+  const svg = document.getElementById('paper');
+  while (svg.firstChild) svg.removeChild(svg.firstChild);   // 換難度重畫前清空舊格子
+  const NS = 'http://www.w3.org/2000/svg';
+  const nums = shuffleNums();
+  let k = 0;
+
+  // 1) 多邊形格線（每格底色 = 該格 spec 的 fillKey 對應顏色；遊戲回饋只覆寫被點擊格）
+  const polyEls = [];
+  let fillIdx = 0;
+  for (const cell of model.cells) {
+    const fill = colorHex(nums[fillIdx++].fillKey);
+    const el = document.createElementNS(NS, 'polygon');
+    el.setAttribute('points', cell.poly.map(p => p[0].toFixed(2) + ',' + p[1].toFixed(2)).join(' '));
+    el.setAttribute('fill', fill);
+    el.dataset.baseFill = fill;
+    el.setAttribute('stroke', '#111');
+    el.setAttribute('stroke-width', '0.35');
+    el.dataset.baseStrokeWidth = '0.35';
+    el.setAttribute('stroke-linejoin', 'round');
+    el.classList.add('cell-shape');
+    svg.appendChild(el);
+    polyEls.push(el);
+  }
+
+  // 2) 圓形格（底色蓋住底下格線，本身是一格；fillIdx 接續多邊形格繼續取 spec）
+  const circEls = [];
+  for (const c of model.circles) {
+    const fill = colorHex(nums[fillIdx++].fillKey);
+    const el = document.createElementNS(NS, 'circle');
+    el.setAttribute('cx', c.x.toFixed(2));
+    el.setAttribute('cy', c.y.toFixed(2));
+    el.setAttribute('r', c.r.toFixed(2));
+    el.setAttribute('fill', fill);
+    el.dataset.baseFill = fill;
+    el.setAttribute('stroke', '#111');
+    el.setAttribute('stroke-width', '0.5');
+    el.dataset.baseStrokeWidth = '0.5';
+    el.classList.add('cell-shape');
+    svg.appendChild(el);
+    circEls.push(el);
+  }
+
+  // 3) 多邊形文字（顏色名；細長格沿長軸旋轉；英文字較長時依字數縮小字級以塞進格內）
+  const FONT_STACK = '"Noto Sans TC","Microsoft JhengHei","PingFang TC",Arial,sans-serif';
+  let pi = 0;
+  for (const cell of model.cells) {
+    const c = centroid(cell.labelPoly);
+    const r = distToEdges(cell.labelPoly, c[0], c[1]);
+    const axis = longestAxis(cell.labelPoly);
+    const slim = axis.len > 4.5 * r;          // 細長格
+    let fontSize = slim
+      ? Math.min(axis.len / 4.5, r * 1.55, 9)
+      : Math.min(9, r * 1.1);
+    fontSize = Math.max(2.5, fontSize);
+    const spec = nums[k++];
+    const label = colorWord(spec.wordKey);
+    fontSize *= Math.min(1, 3 / Math.max(2, label.length));   // 中文 1 字不縮，英文多字按長度縮
+    const text = document.createElementNS(NS, 'text');
+    text.setAttribute('x', c[0].toFixed(2));
+    text.setAttribute('y', c[1].toFixed(2));
+    text.setAttribute('font-size', fontSize.toFixed(2));
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'central');
+    text.setAttribute('font-family', FONT_STACK);
+    text.setAttribute('font-weight', '700');
+    text.setAttribute('fill', inkFor(spec.fillKey));
+    text.textContent = label;
+    polyEls[pi].dataset.target = spec.isTarget ? '1' : '';
+    text.dataset.wordKey = spec.wordKey;
+    setupNumberTextTransform(text, c[0], c[1], slim ? axis.angle : 0);
+    svg.appendChild(text);
+    const region = {
+      isTarget: spec.isTarget,
+      wordKey: spec.wordKey,
+      fillKey: spec.fillKey,
+      id: regions.length,
+      shape: polyEls[pi++],
+      text,
+      baseFill: polyEls[pi - 1].dataset.baseFill || '#fff',
+      baseInk: inkFor(spec.fillKey),
+      found: false,
+      poly: cell.labelPoly,
+      hitPoly: cell.poly,            // 點擊判定用整塊可見格子，不是縮小的文字標示區（大格空白處也點得到）
+      center: c,
+      area: polygonArea(cell.labelPoly),
+      touchRadius: r,
+      neighbors: []
+    };
+    regions.push(region);
+  }
+
+  // 4) 圓形文字（大字）
+  let ci = 0;
+  for (const c of model.circles) {
+    const spec = nums[k++];
+    const label = colorWord(spec.wordKey);
+    let fontSize = Math.min(14, c.r * 0.62);
+    fontSize *= Math.min(1, 3 / Math.max(2, label.length));
+    const text = document.createElementNS(NS, 'text');
+    text.setAttribute('x', c.x.toFixed(2));
+    text.setAttribute('y', c.y.toFixed(2));
+    text.setAttribute('font-size', fontSize.toFixed(2));
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'central');
+    text.setAttribute('font-family', FONT_STACK);
+    text.setAttribute('font-weight', '700');
+    text.setAttribute('fill', inkFor(spec.fillKey));
+    text.textContent = label;
+    circEls[ci].dataset.target = spec.isTarget ? '1' : '';
+    text.dataset.wordKey = spec.wordKey;
+    setupNumberTextTransform(text, c.x, c.y, 0);
+    svg.appendChild(text);
+    const region = {
+      isTarget: spec.isTarget,
+      wordKey: spec.wordKey,
+      fillKey: spec.fillKey,
+      id: regions.length,
+      shape: circEls[ci++],
+      text,
+      baseFill: circEls[ci - 1].dataset.baseFill || '#fff',
+      baseInk: inkFor(spec.fillKey),
+      found: false,
+      circle: c,
+      center: [c.x, c.y],
+      area: Math.PI * c.r * c.r,
+      touchRadius: c.r,
+      neighbors: []
+    };
+    regions.push(region);
+    regionByNum.set(region.id, region);
+  }
+
+  prepareRegionNeighbors();
+
+  // 5) 外框
+  const border = document.createElementNS(NS, 'rect');
+  border.setAttribute('x', MARGIN); border.setAttribute('y', MARGIN);
+  border.setAttribute('width', W - MARGIN * 2); border.setAttribute('height', H - MARGIN * 2);
+  border.setAttribute('fill', 'none');
+  border.setAttribute('stroke', '#111');
+  border.setAttribute('stroke-width', '0.6');
+  svg.appendChild(border);
+}
+
+// ================= 縮放/拖移（手機字太小的解法） =================
+// 捏合縮放 + 單指拖移（放大後）+ ➕➖⛶ 按鈕；改的是 SVG viewBox，列印前自動回復。
+const Zoom = {
+  scale: 1, vx: 0, vy: 0, MAXS: 8,
+  _suppress: false,
+  suppressed() { return this._suppress; },
+  apply() {
+    document.getElementById('paper').setAttribute('viewBox',
+      this.vx.toFixed(3) + ' ' + this.vy.toFixed(3) + ' ' +
+      (W / this.scale).toFixed(3) + ' ' + (H / this.scale).toFixed(3));
+  },
+  clamp() {
+    this.scale = Math.min(this.MAXS, Math.max(1, this.scale));
+    this.vx = Math.min(Math.max(this.vx, 0), W - W / this.scale);
+    this.vy = Math.min(Math.max(this.vy, 0), H - H / this.scale);
+  },
+  reset() { this.scale = 1; this.vx = 0; this.vy = 0; this.apply(); },
+  zoomStep(f) {   // 以目前畫面中心為錨點
+    const cx = this.vx + W / this.scale / 2, cy = this.vy + H / this.scale / 2;
+    const ns = Math.min(this.MAXS, Math.max(1, this.scale * f));
+    this.vx = cx - (W / ns) / 2;
+    this.vy = cy - (H / ns) / 2;
+    this.scale = ns; this.clamp(); this.apply();
+  },
+  zoomAt(clientX, clientY, f) {   // 以滑鼠所在位置（client 座標）為錨點放大/縮小：縮放後該點下方的圖面內容不動
+    const sheet = document.getElementById('sheet');
+    const r = sheet.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const ns = Math.min(this.MAXS, Math.max(1, this.scale * f));
+    if (ns === this.scale) return;                       // 已到 100%（最小）或 MAXS（最大），不動
+    const p = sheetPointFractions(clientX, clientY);
+    const fx = p.x, fy = p.y;
+    const ax = this.vx + fx * (W / this.scale);          // 滑鼠對應的 SVG 錨點
+    const ay = this.vy + fy * (H / this.scale);
+    this.vx = ax - fx * (W / ns);                         // 解出讓錨點維持在同一螢幕位置的新 viewBox 原點
+    this.vy = ay - fy * (H / ns);
+    this.scale = ns; this.clamp(); this.apply();
+  },
+  init() {
+    const sheet = document.getElementById('sheet');
+    const ptrs = new Map();
+    let start = null;
+    const toSvg = (cx, cy) => {
+      const p = sheetPointFractions(cx, cy);
+      return [this.vx + p.x * (W / this.scale),
+              this.vy + p.y * (H / this.scale)];
+    };
+    const snapshot = () => {
+      const ps = [...ptrs.values()].map(p => ({ x: p.x, y: p.y, svg: toSvg(p.x, p.y) }));
+      const s = { scale: this.scale, vx: this.vx, vy: this.vy, ps };
+      if (ps.length >= 2) {
+        s.dist = Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y);
+        s.midSvg = toSvg((ps[0].x + ps[1].x) / 2, (ps[0].y + ps[1].y) / 2);
+      }
+      return s;
+    };
+    sheet.addEventListener('pointerdown', e => {
+      if (ptrs.size === 0) this._suppress = false;
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      start = snapshot();
+    });
+    sheet.addEventListener('pointermove', e => {
+      if (!ptrs.has(e.pointerId) || !start) return;
+      const p = ptrs.get(e.pointerId);
+      p.x = e.clientX; p.y = e.clientY;
+      const ps = [...ptrs.values()];
+      if (ps.length === 1) {
+        const dx = ps[0].x - start.ps[0].x, dy = ps[0].y - start.ps[0].y;
+        if (Math.abs(dx) + Math.abs(dy) > 9) this._suppress = true;
+        if (this.scale > 1 && this._suppress) {     // 放大後單指拖移
+          const f = sheetPointFractions(ps[0].x, ps[0].y);
+          this.vx = start.ps[0].svg[0] - f.x * (W / this.scale);
+          this.vy = start.ps[0].svg[1] - f.y * (H / this.scale);
+          this.clamp(); this.apply();
+        }
+      } else if (ps.length === 2 && start.dist) {   // 兩指捏合
+        this._suppress = true;
+        const nd = Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y);
+        this.scale = Math.min(this.MAXS, Math.max(1, start.scale * nd / start.dist));
+        const mx = (ps[0].x + ps[1].x) / 2, my = (ps[0].y + ps[1].y) / 2;
+        const f = sheetPointFractions(mx, my);
+        this.vx = start.midSvg[0] - f.x * (W / this.scale);
+        this.vy = start.midSvg[1] - f.y * (H / this.scale);
+        this.clamp(); this.apply();
+      }
+    });
+    const end = e => {
+      ptrs.delete(e.pointerId);
+      start = ptrs.size ? snapshot() : null;
+    };
+    sheet.addEventListener('pointerup', end);
+    sheet.addEventListener('pointercancel', end);
+    // 電腦版：滑鼠滾輪以游標所在位置為中心放大/縮小（最小 100%，最大 MAXS 倍）。
+    sheet.addEventListener('wheel', e => {
+      e.preventDefault();                                // 攔住頁面捲動，滾輪只用來縮放棋盤
+      const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;          // 上滾放大、下滾縮小
+      this.zoomAt(e.clientX, e.clientY, f);
+    }, { passive: false });
+    document.getElementById('zin').addEventListener('click', () => this.zoomStep(1.45));
+    document.getElementById('zout').addEventListener('click', () => this.zoomStep(1 / 1.45));
+    document.getElementById('zreset').addEventListener('click', () => this.reset());
+    window.addEventListener('beforeprint', () => this.reset());   // 列印一定用原始比例
+  }
+};
+
+const Layout = {
+  update() {
+    const isLandscape = window.innerWidth > window.innerHeight;
+    const useLandscape = isLandscape && (window.innerHeight <= 560 || window.innerWidth >= 900);
+    document.body.classList.toggle('landscape-play', useLandscape);
+    applyBoardTextRotation();
+    if (!useLandscape) return;
+    const root = document.documentElement.style;
+    const hudW = Math.min(168, Math.max(128, Math.round(window.innerWidth * 0.18)));
+    const pad = 8;
+    const availW = Math.max(160, window.innerWidth - hudW - pad * 2);
+    const availH = Math.max(160, window.innerHeight - pad * 2);
+    const paperW = Math.max(132, Math.min(availH, availW * W / H));
+    const paperH = paperW * H / W;
+    root.setProperty('--landscape-hud-w', hudW + 'px');
+    root.setProperty('--landscape-sheet-w', paperW + 'px');
+    root.setProperty('--landscape-sheet-left', (hudW + pad + Math.max(0, availW - paperH) / 2) + 'px');
+    root.setProperty('--landscape-sheet-top', (pad + Math.max(0, availH - paperW) / 2) + 'px');
+  }
+};
+
+function installBoardTap() {
+  const paper = document.getElementById('paper');
+  let down = null;
+  // pointerup 與其後援 click 會為「同一次實體輕點」都觸發 → 去重，避免一點變兩點（誤扣命）。
+  // 關鍵：只用「同一格 + 短時窗」去重，不要用純時間窗——純時間窗會把「遊戲尾聲快速連點不同格」
+  // 的第二點也吃掉（使用者回報：越點越快時，倒數第一格要點兩下才生效）。不同格一律即時放行。
+  let lastHandled = -Infinity;
+  let lastHandledNum = null;
+
+  function inBoard(clientX, clientY) {
+    const rect = (isLandscapePlay() ? document.getElementById('sheet') : paper).getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 &&
+      clientX >= rect.left && clientX <= rect.right &&
+      clientY >= rect.top && clientY <= rect.bottom;
+  }
+
+  function isUiTarget(target) {
+    return !!(target && target.closest &&
+      target.closest('button, a, input, textarea, select, .overlay, .menu, .hud, .topbar, .zoomctl, .cta, .pause-screen'));
+  }
+
+  // 由螢幕座標解析格子並下棋。pointerup 與 click 雙路徑，哪個先到就由它處理。
+  function resolveTap(clientX, clientY) {
+    if (!inBoard(clientX, clientY)) return;
+    const p = clientToSvgPoint(clientX, clientY);
+    if (!p) return;
+    const r = regionFromSvgPoint(p[0], p[1]);
+    if (!r) return;
+    const now = performance.now();
+    // 同一格在 400ms 內又被觸發 → 視為同一次輕點的 pointerup+click 重複事件，丟棄。
+    // 點到不同格代表是新的一點（即使很快），一律放行，不會被前一點的時窗卡住。
+    if (r.id === lastHandledNum && now - lastHandled < 400) return;
+    lastHandled = now;
+    lastHandledNum = r.id;
+    Game.tap(r, { force: true });
+  }
+
+  document.addEventListener('pointerdown', e => {
+    if (isUiTarget(e.target)) return;
+    if (!inBoard(e.clientX, e.clientY)) return;
+    if (!e.isPrimary) return;
+    down = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() };
+  }, true);
+  document.addEventListener('pointerup', e => {
+    if (isUiTarget(e.target)) return;
+    if (!down || down.id !== e.pointerId) return;
+    const dx = e.clientX - down.x;
+    const dy = e.clientY - down.y;
+    const dt = performance.now() - down.t;
+    down = null;
+    if (Math.hypot(dx, dy) > 20 || dt > 1300) return;    // 放寬手機輕點容錯（移動/長按才當拖移）
+    resolveTap(e.clientX, e.clientY);
+  }, true);
+  document.addEventListener('pointercancel', () => { down = null; }, true);
+  // 後援：部分手機 / App 內嵌瀏覽器（LINE、FB、IG 等 WebView）Pointer Events 不穩或不發 pointerup，
+  // 但輕點一定會合成 click（捏合/拖移後瀏覽器會自動抑制 click），故以 click 作為保險絲確保「點得到」。
+  document.addEventListener('click', e => {
+    if (isUiTarget(e.target)) return;
+    resolveTap(e.clientX, e.clientY);
+  }, true);
+}
+
+// ================= 背景音樂（遊戲中循環播放） =================
+// 「8-bit Epic Space Shooter Music」by HydroGene (OpenGameArt), CC0.
+const Music = {
+  enabled: localStorage.getItem('colorhunter_music') !== 'off',
+  ok: true, el: null,
+  init() {
+    this.el = document.getElementById('bgm');
+    this.el.volume = 0.35;
+    this.el.addEventListener('error', () => {   // bgm.mp3 不在 → 隱藏按鈕、不影響遊戲
+      this.ok = false;
+      document.getElementById('musicBtn').hidden = true;
+      document.getElementById('hudMusicBtn').hidden = true;
+    });
+    this.refresh();
+  },
+  load() { if (this.ok && this.el) { try { this.el.load(); } catch (e) {} } },
+  play() { if (this.enabled && this.ok) return this.el.play().catch(() => {}); return null; },
+  pause() { if (this.el) this.el.pause(); },
+  stop() { if (this.el) { this.el.pause(); this.el.currentTime = 0; } },
+  toggle() {
+    this.enabled = !this.enabled;
+    localStorage.setItem('colorhunter_music', this.enabled ? 'on' : 'off');
+    if (this.enabled) this.play(); else this.pause();
+    this.refresh();
+  },
+  refresh() {
+    for (const id of ['musicBtn', 'hudMusicBtn']) {
+      const b = document.getElementById(id);
+      if (!b) continue;
+      b.classList.toggle('off', !this.enabled);
+      b.classList.toggle('on', this.enabled);   // 開＝橘色 / 關＝白色
+      b.setAttribute('aria-label', this.enabled ? t('musicOn') : t('musicOff'));
+      b.title = this.enabled ? t('musicOn') : t('musicOff');
+    }
+  }
+};
+
+// ================= 遊戲模式「顏色獵人」 =================
+// 規則：棋盤每格有「底色」與「文字（顏色名）」；多數相符，少數目標格底色與文字對不上，
+//       語音唸出目標文字，玩家要最快找出所有對不上的目標格；點錯扣 1 條命，錯 3 次結束。
+// 常見、好區分的顏色（依使用者要求挑常見色）。每格底色 = 某色 hex，文字 = 某色名（中／英）。
+const COLORS = [
+  { key: 'red',    hex: '#ef4444', zh: '紅', en: 'Red' },
+  { key: 'orange', hex: '#f97316', zh: '橙', en: 'Orange' },
+  { key: 'yellow', hex: '#facc15', zh: '黃', en: 'Yellow' },
+  { key: 'green',  hex: '#22c55e', zh: '綠', en: 'Green' },
+  { key: 'blue',   hex: '#3b82f6', zh: '藍', en: 'Blue' },
+  { key: 'purple', hex: '#a855f7', zh: '紫', en: 'Purple' },
+  { key: 'pink',   hex: '#ec4899', zh: '粉', en: 'Pink' },
+  { key: 'brown',  hex: '#92400e', zh: '棕', en: 'Brown' },
+  { key: 'gray',   hex: '#9ca3af', zh: '灰', en: 'Gray' },
+  { key: 'black',  hex: '#1f2937', zh: '黑', en: 'Black' }
+];
+const COLOR_BY_KEY = {};
+for (const _c of COLORS) COLOR_BY_KEY[_c.key] = _c;
+function colorHex(key) { return (COLOR_BY_KEY[key] || {}).hex || '#e5e7eb'; }
+function colorWord(key) { const c = COLOR_BY_KEY[key]; return c ? (currentLang === 'zh' ? c.zh : c.en) : '?'; }
+// 字色依底色明暗自動切換（深底白字、亮底黑字）——確保「文字」本身一定看得清，被測的是「底色」。
+function inkFor(key) {
+  const hex = colorHex(key).replace('#', '');
+  const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum < 0.58 ? '#ffffff' : '#111827';
+}
+// 排行榜依難度分開存：簡單(1–50)、普通(1–75)、困難(1–100) 各一份、各取前 20 名。
+const LB_KEY_BASE = 'colorhunter_leaderboard';   // 顏色獵人四難度各一份本機備援
+function lbKey(mode) { return LB_KEY_BASE + '_' + (MODE[mode] ? mode : 'normal'); }
+function modeLabel(mode) {
+  return mode === 'beginner' ? t('modeBeginner')
+       : mode === 'easy' ? t('modeEasy')
+       : mode === 'hard' ? t('modeHard')
+       : t('modeNormal');
+}
+function cellsTag(n) { return n + (currentLang === 'zh' ? ' 格' : ' cells'); }   // 難度副標：格子數（越多越難找 67）
+function modeShort(mode) {
+  return mode === 'beginner' ? t('modeBeginnerShort')
+       : mode === 'easy' ? t('modeEasyShort')
+       : mode === 'hard' ? t('modeHardShort')
+       : t('modeNormalShort');
+}
+
+// ================= 雲端排行榜（Google Sheet + Apps Script Web App） =================
+// 通關成績上傳到「數字獵人排行榜」Google Sheet，三難度分開、各只留最快前 20 名。
+// 上傳帶 HMAC-SHA256 簽章＋時間戳＋nonce；後端驗章、防重放、檢查秒數合理性，
+// 擋掉「看一眼網址就能 curl 灌假分數」的低門檻偽造。（靜態前端無法藏絕對機密，金鑰僅做混淆）
+// 67 獵人排行榜 Apps Script Web App /exec 網址。後端在 iiikccc02 帳號，需手動部署（見 backend/DEPLOY.md）。
+// 部署前留空字串＝純本機排行榜（localStorage），部署後把 /exec 網址貼進來即啟用雲端。
+const LB_API = '';
+const LB_KC = [56,99,62,110,63,107,59,109,57,104,60,98,106,105,111,108,63,110,59,56,107,99,60,62,109,57,105,106,111,59,98,104,63,99,107,106,108,56,110,60,62,98,105,57,104,109,59,107];   // 顏色獵人專用密鑰（XOR 90 還原；改前端要同步改 backend/Code.gs 的 SECRET）   // 67 獵人專用新密鑰（XOR 90 還原；改前端就要同步改 backend/Code.gs 的 SECRET）
+function lbSecret() { return LB_KC.map(c => String.fromCharCode(c ^ 90)).join(''); }
+
+// --- 純 JS SHA-256 / HMAC：區網 http（非 https）沒有 crypto.subtle 也能算簽章 ---
+function sha256Bytes(bytes) {
+  const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+             0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+             0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+             0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+             0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+             0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+             0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+             0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+  let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a,
+      h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+  const l = bytes.length;
+  const total = (((l + 9) + 63) >> 6) << 6;
+  const p = new Uint8Array(total);
+  p.set(bytes); p[l] = 0x80;
+  const dv = new DataView(p.buffer);
+  dv.setUint32(total - 8, Math.floor((l * 8) / 4294967296));
+  dv.setUint32(total - 4, (l * 8) >>> 0);
+  const w = new Int32Array(64);
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+  for (let off = 0; off < total; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+    }
+    let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+    for (let i = 0; i < 64; i++) {
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (h + S1 + ch + K[i] + w[i]) | 0;
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0;
+    h4 = (h4 + e) | 0; h5 = (h5 + f) | 0; h6 = (h6 + g) | 0; h7 = (h7 + h) | 0;
+  }
+  const out = new Uint8Array(32);
+  const odv = new DataView(out.buffer);
+  [h0, h1, h2, h3, h4, h5, h6, h7].forEach((x, i) => odv.setUint32(i * 4, x >>> 0));
+  return out;
+}
+function hmacSha256Hex(keyStr, msgStr) {
+  const enc = new TextEncoder();
+  let key = enc.encode(keyStr);
+  if (key.length > 64) key = sha256Bytes(key);
+  const ipad = new Uint8Array(64), opad = new Uint8Array(64);
+  for (let i = 0; i < 64; i++) { const k = key[i] || 0; ipad[i] = k ^ 0x36; opad[i] = k ^ 0x5c; }
+  const msg = enc.encode(msgStr);
+  const inner = new Uint8Array(64 + msg.length);
+  inner.set(ipad); inner.set(msg, 64);
+  const ih = sha256Bytes(inner);
+  const outer = new Uint8Array(96);
+  outer.set(opad); outer.set(ih, 64);
+  return Array.from(sha256Bytes(outer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+function makeNonce() {
+  try {
+    const cryptoObj = window.crypto || window.msCrypto;
+    if (cryptoObj && cryptoObj.getRandomValues) {
+      return Array.from(cryptoObj.getRandomValues(new Uint8Array(12)))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch (e) {}
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 18);
+}
+async function fetchJson(url, options) {
+  const res = await fetch(url, options);
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch (e) { throw new Error('bad json'); }
+  if (!res.ok) throw new Error('http ' + res.status);
+  return data;
+}
+function sameScore(a, b) {
+  if (!a || !b) return false;
+  if (a.name !== b.name || Number(a.sec) !== Number(b.sec)) return false;
+  const fastOk = b.fast == null || a.fast == null || Math.abs(Number(a.fast) - Number(b.fast)) < 0.01;
+  const slowOk = b.slow == null || a.slow == null || Math.abs(Number(a.slow) - Number(b.slow)) < 0.01;
+  return fastOk && slowOk;
+}
+
+const CloudLb = {
+  cache: {},            // mode -> { ts, top }
+  TTL: 120 * 1000,      // 2 分鐘內切分頁/結算判斷不重抓
+  _allTs: 0,            // 上次「一次抓全難度」的時間
+  // 開場一次把 4 個難度的榜單全抓回（後端 ?mode=all，對帳號仍只算 1 次 API），
+  // 之後切難度頁籤、結算判斷要不要上傳都吃這份快取、不再打 API。
+  async prefetchAll(force) {
+    if (!LB_API) return;                               // 未部署雲端 → 純本機，不預抓
+    if (!force && this._allTs && Date.now() - this._allTs < this.TTL) return;
+    if (this._allInflight) return this._allInflight;   // 已有一個在抓 → 共用，避免切頁籤時重複打
+    this._allInflight = (async () => {
+      try {
+        const data = await fetchJson(LB_API + '?mode=all');
+        if (data && data.ok && data.all) {
+          const now = Date.now();
+          Object.keys(data.all).forEach(m => { this.cache[m] = { ts: now, top: data.all[m] || [] }; });
+          this._allTs = now;
+        }
+      } catch (e) { /* 預抓失敗不影響遊戲，需要時各 mode fetch 仍會補抓 */ }
+    })();
+    try { await this._allInflight; } finally { this._allInflight = null; }
+  },
+  // 用已快取的榜單判斷此成績進不進得了前 20：true=進、false=不進、null=無快取無法判斷（照常上傳）。
+  // 註：榜單門檻只會隨高手加入而變快（cutoff 變小），快取偏舊只會偏寬鬆 → 判 false 必為真不進，跳過上傳安全。
+  qualifies(mode, sec) {
+    const c = this.cache[mode];
+    if (!c || !Array.isArray(c.top)) return null;
+    if (c.top.length < 20) return true;                 // 還沒滿 20 名，一定進榜
+    const cutoff = c.top[c.top.length - 1];             // 目前第 20 名
+    if (!cutoff || cutoff.sec == null) return null;
+    return Number(sec) < Number(cutoff.sec);            // 比第 20 名快才進
+  },
+  async fetch(mode, force) {
+    if (!LB_API) return loadLb(mode);                  // 未部署雲端 → 純本機排行榜
+    const c = this.cache[mode];
+    if (!force && c && Date.now() - c.ts < this.TTL) return c.top;
+    const data = await fetchJson(LB_API + '?mode=' + encodeURIComponent(mode));
+    if (!data.ok) throw new Error(data.error || 'fetch failed');
+    this.cache[mode] = { ts: Date.now(), top: data.top };
+    return data.top;
+  },
+  // 顯示榜單一律走這裡：冷的話用「一次抓全難度」(?mode=all) 補滿快取，再回該難度的榜。
+  // 這樣開始畫面、遊戲中、切難度頁籤都共用同一份預抓資料，不會再每個難度各打一次 API。
+  async top(mode) {
+    if (!LB_API) return loadLb(mode);                  // 未部署雲端 → 純本機排行榜
+    const c = this.cache[mode];
+    if (c && Date.now() - c.ts < this.TTL) return c.top;   // 快取新鮮直接用
+    await this.prefetchAll();                              // 冷的話一次抓全部（1 次請求）
+    const c2 = this.cache[mode];
+    if (c2) return c2.top;
+    return this.fetch(mode);                               // 萬一 all 沒涵蓋該難度才退而單抓
+  },
+  async submitOnce(name, mode, sec, errors) {
+    const ts = Date.now();
+    const nonce = makeNonce();
+    const sig = hmacSha256Hex(lbSecret(), [name, mode, sec, errors, ts, nonce].join('|'));
+    const data = await fetchJson(LB_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // 簡單請求，避開 CORS preflight
+      body: JSON.stringify({ name, mode, sec, errors, ts, nonce, sig })
+    });
+    if (!data.ok) throw new Error(data.error || 'submit failed');
+    this.cache[mode] = { ts: Date.now(), top: data.top };
+    return data;
+  },
+  async submit(name, mode, sec, errors) {
+    if (!LB_API) {                                     // 未部署雲端 → 直接算本機名次回傳，不報失敗
+      const top = loadLb(mode);
+      const idx = top.findIndex(r => r.name === name && Number(r.sec) === Number(sec));
+      return { ok: true, mode, top, rank: idx >= 0 ? idx + 1 : null, local: true };
+    }
+    const score = { name, sec };
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { return await this.submitOnce(name, mode, sec, errors); }
+      catch (err) {
+        lastErr = err;
+        try {
+          const top = await this.fetch(mode, true);
+          const idx = top.findIndex(row => sameScore(row, score));
+          if (idx >= 0) return { ok: true, mode, top, rank: idx + 1, recovered: true };
+        } catch (e) {}
+        if (attempt < 2) await delay(600 + attempt * 900 + Math.floor(Math.random() * 250));
+      }
+    }
+    throw lastErr;
+  }
+};
+
+// 通關留名：記住上次輸入的名字，下次自動帶入；沒記錄過就留空。
+function savedPlayerName() {
+  try { return localStorage.getItem('colorhunter_playerName') || ''; } catch (e) { return ''; }
+}
+
+const Sound = {
+  enabled: localStorage.getItem('colorhunter_sound') !== 'off',
+  ctx: null,
+  ensure() {
+    if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.ctx.state === 'suspended') return this.ctx.resume();
+    return Promise.resolve();
+  },
+  tone(freq, at, dur, type, vol) {
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, this.ctx.currentTime + at);
+    g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + at + dur);
+    o.connect(g); g.connect(this.ctx.destination);
+    o.start(this.ctx.currentTime + at); o.stop(this.ctx.currentTime + at + dur + 0.05);
+  },
+  seq(notes, type, step, dur, vol) {
+    if (!this.enabled) return;
+    type = type || 'sine'; step = step || 0.09; dur = dur || 0.16; vol = vol || 0.18;
+    try { this.ensure(); notes.forEach((f, i) => this.tone(f, i * step, dur, type, vol)); } catch (e) {}
+  },
+  correct() { this.seq([660, 990]); },
+  wrong()   { this.seq([170], 'sawtooth', 0, 0.3, 0.22); },
+  over()    { this.seq([392, 311, 233], 'triangle', 0.18, 0.3); },
+  win()     { this.seq([523, 659, 784, 1047], 'triangle', 0.13, 0.25); },
+  open()    { this.seq([392, 523], 'triangle', 0.08, 0.12, 0.08); },
+  toggle() {
+    this.enabled = !this.enabled;
+    localStorage.setItem('colorhunter_sound', this.enabled ? 'on' : 'off');
+    syncSoundButtons();
+    if (this.enabled) this.correct();
+  }
+};
+
+// ================= 語音報詞（每局目標顏色詞出現時念出來） =================
+// 用瀏覽器內建 Web Speech API（SpeechSynthesis），念出本局要找的「目標顏色詞」，可一鍵關閉。
+const Speech = {
+  enabled: localStorage.getItem('colorhunter_speak') !== 'off',
+  ok: 'speechSynthesis' in window,
+  zhVoice: null,
+  init() {
+    if (!this.ok) {                               // 瀏覽器不支援 → 隱藏按鈕、不影響遊戲
+      for (const id of ['speakBtn', 'hudSpeakBtn']) {
+        const b = document.getElementById(id);
+        if (b) b.hidden = true;
+      }
+      return;
+    }
+    this.pickVoice();
+    // 語音清單可能非同步載入，voiceschanged 後再挑一次中文語音
+    window.speechSynthesis.addEventListener('voiceschanged', () => this.pickVoice());
+    this.refresh();
+  },
+  pickVoice() {
+    const voices = window.speechSynthesis.getVoices() || [];
+    this.zhVoice = voices.find(v => /^zh/i.test(v.lang)) || null;
+  },
+  // key = 顏色 key（如 'blue'）；念出對應語言的顏色詞（如「藍」／"Blue"）。
+  say(key) {
+    if (!this.ok || !this.enabled || !key) return;
+    const word = colorWord(key);
+    try {
+      window.speechSynthesis.cancel();            // 蓋掉上一局殘留，避免排隊堆疊
+      const u = new SpeechSynthesisUtterance(String(word));
+      u.lang = currentLang === 'zh' ? 'zh-TW' : 'en-US';
+      if (currentLang === 'zh' && this.zhVoice) u.voice = this.zhVoice;
+      u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  },
+  toggle() {
+    this.enabled = !this.enabled;
+    localStorage.setItem('colorhunter_speak', this.enabled ? 'on' : 'off');
+    if (!this.enabled && this.ok) window.speechSynthesis.cancel();
+    this.refresh();
+    if (this.enabled && Game.active && Game.target) this.say(Game.target);
+  },
+  refresh() {
+    for (const id of ['speakBtn', 'hudSpeakBtn']) {
+      const b = document.getElementById(id);
+      if (!b) continue;
+      b.classList.toggle('off', !this.enabled);
+      b.classList.toggle('on', this.enabled);   // 開＝橘色 / 關＝白色
+      b.setAttribute('aria-label', this.enabled ? t('speakOn') : t('speakOff'));
+      b.title = this.enabled ? t('speakOnDesc') : t('speakOff');
+    }
+  }
+};
+
+function fmtTime(s) {
+  s = Number(s) || 0;
+  const unit = currentLang === 'zh' ? ' 秒' : 's';
+  if (s < 60) return (Math.round(s * 100) / 100).toFixed(2) + unit;   // 例 3.42 秒
+  const m = Math.floor(s / 60), rest = s - m * 60;
+  return m + ':' + (rest < 10 ? '0' : '') + rest.toFixed(2);
+}
+let toastTimer = null;
+function showToast(msg, kind) {
+  const t = document.getElementById('toast');
+  t.className = 'toast' + (kind === 'ok' ? ' ok' : '');
+  t.textContent = msg; t.hidden = false;
+  const hud = document.getElementById('hud');
+  if (isLandscapePlay()) {
+    t.style.top = '8px';              // 橫屏 HUD 是左側滿高欄，提示固定在棋盤區上方
+  } else if (hud && !hud.hidden) {     // 遊戲中：壓到 HUD 下方，避免蓋住計時/愛心/進度
+    t.style.top = (hud.getBoundingClientRect().bottom + 8) + 'px';
+  } else {
+    t.style.top = '';                 // 非遊戲：回到 CSS 預設 64px
+  }
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 2600);
+}
+function hideToast() {
+  const t = document.getElementById('toast');
+  t.hidden = true;
+  t.className = 'toast';
+}
+function showPanel(html, panelClass = '') {
+  toggleMenu(false);
+  const panel = document.getElementById('panel');
+  panel.className = 'panel' + (panelClass ? ' ' + panelClass : '');
+  panel.innerHTML = html;
+  document.body.classList.add('modal-open');
+  document.getElementById('overlay').hidden = false;
+}
+function hideOverlay() {
+  document.getElementById('overlay').hidden = true;
+  document.body.classList.remove('modal-open');
+}
+function installOverlayTouchLock() {
+  const overlay = document.getElementById('overlay');
+  const panel = document.getElementById('panel');
+  let startY = 0;
+  // v43：移除自製 panel touchmove 攔截——它 { passive:false } + preventDefault 會干擾手機原生捲動，
+  //   且「面板沒溢出時 atTop&&atBottom 同時成立 → 擋掉所有滑動」害排行榜上下左右全捲不動。
+  //   改純靠 CSS 原生捲動（.panel overflow-y:auto + touch-action:pan-y + overscroll-behavior:contain），
+  //   背景鎖定交給下方 overlay touchmove handler（只擋 panel 以外的觸控）即可，手機原生捲動最穩。
+  panel.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) startY = e.touches[0].clientY;
+  }, { passive: true });
+  overlay.addEventListener('touchmove', e => {
+    if (e.touches.length > 1 || !panel.contains(e.target)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('gesturestart', e => {
+    if (!overlay.hidden) e.preventDefault();
+  }, { passive: false });
+}
+function flashWrong(r) {
+  const orig = r.shape.getAttribute('fill');
+  r.shape.setAttribute('fill', '#fca5a5');
+  setTimeout(() => { if (!r.found) r.shape.setAttribute('fill', orig === '#fca5a5' ? (r.baseFill || '#fff') : orig); }, 380);
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function markFoundTarget(r) {
+  // 找到的目標格：保留原底色、加醒目綠色粗框＋打勾感，文字加白描邊確保看得清。
+  r.shape.setAttribute('stroke', '#16a34a');
+  r.shape.setAttribute('stroke-width', '1.6');
+  r.shape.classList.add('found');
+  if (r.text) {
+    r.text.setAttribute('font-weight', '900');
+    r.text.setAttribute('stroke', (r.baseInk === '#ffffff') ? '#111827' : '#ffffff');
+    r.text.setAttribute('stroke-width', '0.6');
+    r.text.setAttribute('paint-order', 'stroke');
+  }
+}
+function resetRegionStyle(r) {
+  r.shape.setAttribute('fill', r.baseFill || r.shape.dataset.baseFill || '#fff');
+  r.shape.setAttribute('stroke', '#111');
+  r.shape.setAttribute('stroke-width', r.shape.dataset.baseStrokeWidth || '0.35');
+  r.shape.classList.remove('found');
+  if (r.text) {
+    r.text.setAttribute('fill', r.baseInk || '#111');
+    r.text.removeAttribute('font-weight');
+    r.text.removeAttribute('stroke');
+    r.text.removeAttribute('stroke-width');
+    r.text.removeAttribute('paint-order');
+  }
+  r.found = false;
+}
+
+const Game = {
+  active: false, ended: false, paused: false, mode: 'normal', target: 0, targetTotal: 1, queue: [], found: 0, errors: 0,
+  t0: 0, pausedMs: 0, pauseStart: 0, tick: null, questionStartMs: 0, perNum: [],
+  start(mode) {
+    this.reset();
+    const selectedMode = MODE[mode] ? mode : savedMode();
+    localStorage.setItem('colorhunter_mode', selectedMode);
+    if (N !== MODE[selectedMode]) N = MODE[selectedMode];
+    draw();                       // 每一局重畫全新棋盤：目標顏色詞與各格底色／文字全新（draw 內設好 TARGET_KEY）
+    this.mode = selectedMode;      // 記住本局難度，結算時存入對應排行榜
+    CloudLb.prefetchAll();        // 開場預抓全難度榜單（背景、不 await），結算時用來判斷要不要上傳
+    this.active = true;
+    this.ended = false;
+    this.paused = false;
+    this.pausedMs = 0;
+    document.body.classList.add('gaming');
+    Layout.update();
+    this.found = 0; this.errors = 0;
+    this.targetTotal = targetCountFor(N);
+    this.target = TARGET_KEY;     // 本局要找的「目標顏色詞」key
+    this.t0 = Date.now();
+    this.tick = setInterval(() => this.showTime(), 100);   // 反應遊戲：100ms 更新計時，更跟手
+    document.getElementById('hud').hidden = false;
+    this.updateTargetDisplay();   // HUD 顯示目標顏色詞
+    this.updateHud();
+    Sound.seq([523, 784]);
+    Speech.say(this.target);      // 開場念出目標顏色詞（語音）
+    Music.play();
+  },
+  reset() {
+    clearInterval(this.tick);
+    this.paused = false;
+    document.body.classList.remove('paused');
+    document.getElementById('pauseScreen').hidden = true;
+    this.syncPauseBtn();
+    Zoom.reset();
+    for (const r of regions) resetRegionStyle(r);
+    hideToast(); hideOverlay();
+    if (Speech.ok) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+  },
+  quit() {
+    this.active = false;
+    this.ended = false;
+    this.reset();
+    Music.stop();
+    document.body.classList.remove('gaming');
+    Layout.update();
+    document.getElementById('hud').hidden = true;
+    showStartDialog();
+  },
+  pause() {
+    if (!this.active || this.ended || this.paused) return;
+    this.paused = true;
+    this.pauseStart = Date.now();
+    clearInterval(this.tick);                 // 時間停止倒數
+    document.body.classList.add('paused');
+    document.getElementById('pauseScreen').hidden = false;
+    if (Music.ok) Music.el.pause();           // 背景音樂暫停（保留進度，不歸零）
+    this.syncPauseBtn();
+  },
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    this.pausedMs += Date.now() - this.pauseStart;   // 把暫停時長補回，計時不跳秒
+    this.tick = setInterval(() => this.showTime(), 250);
+    document.body.classList.remove('paused');
+    document.getElementById('pauseScreen').hidden = true;
+    Music.play();
+    this.showTime();
+    this.syncPauseBtn();
+  },
+  togglePause() { this.paused ? this.resume() : this.pause(); },
+  syncPauseBtn() {
+    const b = document.getElementById('pauseBtn');
+    if (!b) return;
+    b.innerHTML = iconSvg(this.paused ? 'play' : 'pause');
+    b.title = this.paused ? t('resume') : t('pause');
+    b.setAttribute('aria-label', b.title);
+  },
+  targetsRemaining() { return Math.max(0, this.targetTotal - this.found); },
+  // HUD 顯示本局目標顏色詞（隨語言切換更新）；用中性色顯示，不暗示其代表的顏色。
+  updateTargetDisplay() {
+    const el = document.getElementById('targetNum');
+    if (el) el.textContent = this.target ? colorWord(this.target) : '–';
+  },
+  targetRegion() { return regions.find(r => r.isTarget && !r.found); },
+  tap(r, opts) {
+    if (!this.active || this.paused || r.found) return;
+    if (!(opts && opts.force) && Zoom.suppressed()) return;         // 拖移/捏合手勢結尾不算點擊
+    if (r.isTarget) {                               // 找到「底色與文字對不上」的目標格 → 高亮保留，全部找完才過關
+      this.found++;
+      r.found = true;
+      markFoundTarget(r);
+      Sound.correct();
+      this.updateHud();
+      if (this.found >= this.targetTotal) {
+        hideToast();
+        this.win();
+      } else {
+        showToast(t('foundTarget', {
+          found: this.found,
+          total: this.targetTotal,
+          remain: this.targetsRemaining()
+        }), 'ok');
+      }
+    } else {                                         // 點到相符格（底色＝文字）→ 扣命
+      this.errors++;
+      Sound.wrong();
+      flashWrong(r);
+      this.updateHud();
+      if (this.errors >= 3) this.lose(colorWord(r.wordKey));
+      else showToast(t('wrongTap', { wrong: colorWord(r.wordKey), left: 3 - this.errors }));
+    }
+  },
+  activeMs() {
+    const pausing = this.paused ? Date.now() - this.pauseStart : 0;
+    return Date.now() - this.t0 - this.pausedMs - pausing;
+  },
+  elapsedSec() { return Math.floor(this.activeMs() / 1000); },
+  elapsedSecExact() { return Math.round(this.activeMs() / 10) / 100; },   // 2 位小數：反應遊戲公平排名
+  showTime() { document.getElementById('timeDisp').textContent = (this.activeMs() / 1000).toFixed(1); },
+  updateHud() {
+    document.getElementById('livesDisp').textContent =
+      '♥'.repeat(Math.max(0, 3 - this.errors)) + '♡'.repeat(Math.min(3, this.errors));
+    const prog = document.getElementById('progDisp');
+    if (prog) prog.textContent = t('remainingTargets', { remain: this.targetsRemaining(), total: this.targetTotal });
+    this.showTime();
+  },
+  foundStats() { return ''; },   // 顏色獵人以找完全部對不上格的總時間排名，無逐題統計
+  lose(wrongNum) {
+    this.active = false;
+    this.ended = true;
+    clearInterval(this.tick);
+    Music.stop();
+    Sound.over();
+    currentPanelRenderer = null;
+    showPanel('<h2>' + iconSvg('exit') + t('gameOver') + '</h2>' +
+      '<p>' + t('loseDetail', { wrong: wrongNum, remain: this.targetsRemaining() }) + '</p>' +
+      '<div class="btn-row"><button onclick="startGame(&quot;' + this.mode + '&quot;)">' + buttonHtml('retry', t('playAgain')) + '</button>' +
+      '<button class="secondary" onclick="Game.quit()">' + buttonHtml('exit', t('leaveGame')) + '</button></div>');
+  },
+  win() {
+    this.active = false;
+    this.ended = true;
+    clearInterval(this.tick);
+    Music.stop();
+    const sec = this.elapsedSecExact();
+    Sound.win();
+    currentPanelRenderer = null;
+    showPanel('<h2>' + iconSvg('trophy') + t('winTitle') + '</h2>' +
+      '<p>' + t('winDetail', { time: fmtTime(sec), sec, errors: this.errors, targets: this.targetTotal }) + '</p>' +
+      '<p>' + t('leaveName') + '</p>' +
+      '<input type="text" id="nameInput" maxlength="8" placeholder="' + t('namePlaceholder') + '" value="' + escapeHtml(savedPlayerName()) + '" onkeydown="if(event.key===&quot;Enter&quot;){saveScore(' + sec + ')}">' +
+      '<div class="btn-row"><button onclick="saveScore(' + sec + ')">' + buttonHtml('save', t('saveLeaderboard')) + '</button>' +
+      '<button class="secondary" onclick="Game.quit()">' + buttonHtml('exit', t('skipSave')) + '</button></div>');
+    setTimeout(() => {
+      const input = document.getElementById('nameInput');
+      if (input) { input.focus(); input.select(); }
+    }, 0);
+  }
+};
+
+function loadLb(mode) {
+  try { return JSON.parse(localStorage.getItem(lbKey(mode))) || []; } catch (e) { return []; }
+}
+// 本局單題耗時的最快/最慢（秒）；沒有任何紀錄回 null。用於排行榜「最快找到/最慢找到」欄。
+function foundFastSlow() {
+  let fast = null, slow = null;
+  for (let num = 1; num <= N; num++) {
+    const ms = Game.perNum[num];
+    if (ms == null) continue;
+    if (fast === null || ms < fast) fast = ms;
+    if (slow === null || ms > slow) slow = ms;
+  }
+  return { fast: fast === null ? null : +(fast / 1000).toFixed(2),
+           slow: slow === null ? null : +(slow / 1000).toFixed(2) };
+}
+// ===== 上傳雲端失敗偵錯：保留最近一次上傳失敗的錯誤訊息，雙擊失敗文字可叫出來查看／複製 =====
+let lastCloudError = null;
+// 把上傳丟出的 Error/物件整理成人看得懂、可複製的純文字（訊息 + 堆疊）
+function describeCloudError(err) {
+  if (err == null) return t('noErrorObject');
+  const parts = [];
+  if (err.name && err.message) parts.push(err.name + ': ' + err.message);
+  else if (err.message) parts.push(err.message);
+  if (err.stack && err.stack !== err.message) parts.push(err.stack);
+  let txt = parts.join('\n').trim();
+  if (!txt) { try { txt = (typeof err === 'string') ? err : JSON.stringify(err); } catch (e) { txt = String(err); } }
+  return txt || t('unknownError');
+}
+// 手機 dblclick 事件常不觸發（觸控裝置不保證合成 dblclick），改用 click 自製「連點兩下」偵測：
+// 兩次 tap 間隔 < 450ms 才叫出錯誤對話框——單擊不動作，順便降低使用者誤按。桌機與手機皆適用。
+let _cloudErrLastTap = 0;
+function handleCloudErrorTap() {
+  const now = Date.now();
+  if (now - _cloudErrLastTap > 0 && now - _cloudErrLastTap < 450) {
+    _cloudErrLastTap = 0;
+    showCloudErrorDialog();
+  } else {
+    _cloudErrLastTap = now;
+  }
+}
+function showCloudErrorDialog() {
+  if (!lastCloudError) return;                 // 沒有錯誤就不出現對話框
+  closeCloudErrorDialog();
+  const dlg = document.createElement('div');
+  dlg.id = 'cloudErrDialog';
+  dlg.className = 'err-mask';
+  dlg.innerHTML =
+    '<div class="err-box">' +
+      '<h3>' + t('cloudErrorTitle') + '</h3>' +
+      '<textarea id="cloudErrText" readonly>' + escapeHtml(lastCloudError) + '</textarea>' +
+      '<div class="err-btns">' +
+        '<button type="button" class="err-copy" onclick="copyCloudError(this)">' + t('copyError') + '</button>' +
+        '<button type="button" class="err-close" onclick="closeCloudErrorDialog()">' + t('close') + '</button>' +
+      '</div>' +
+    '</div>';
+  dlg.addEventListener('click', e => { if (e.target === dlg) closeCloudErrorDialog(); });  // 點遮罩外關閉
+  document.body.appendChild(dlg);
+}
+function closeCloudErrorDialog() {
+  const dlg = document.getElementById('cloudErrDialog');
+  if (dlg) dlg.remove();
+}
+function copyCloudError(btn) {
+  const ta = document.getElementById('cloudErrText');
+  if (!ta) return;
+  const flash = () => { if (btn) { const o = btn.textContent; btn.textContent = t('copied'); setTimeout(() => { btn.textContent = o; }, 1500); } };
+  const fallback = () => {
+    try {
+      ta.removeAttribute('readonly'); ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
+      document.execCommand('copy'); ta.setAttribute('readonly', '');
+      flash();
+    } catch (e) {}
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(ta.value).then(flash).catch(fallback);
+  } else { fallback(); }
+}
+function saveScore(sec) {
+  const input = document.getElementById('nameInput');
+  if (!input || input.dataset.saved === '1') return;
+  input.dataset.saved = '1';
+  const name = (input.value.trim() || t('player')).slice(0, 8);   // 姓名最多 8 字
+  try { localStorage.setItem('colorhunter_playerName', name); } catch (e) {}   // 記住名字，下次自動帶入
+  const mode = Game.mode || savedMode();      // 存入本局難度對應的排行榜
+  const lb = loadLb(mode);                    // 本機備援照存（離線也看得到自己的紀錄）
+  lb.push({ name, sec, errors: Game.errors, date: new Date().toISOString().slice(0, 10) });
+  lb.sort((a, b) => a.sec - b.sec);
+  localStorage.setItem(lbKey(mode), JSON.stringify(lb.slice(0, 20)));
+  const errors = Game.errors;
+  lastCloudError = null;                       // 新一輪上傳，清掉上次的失敗訊息
+  // 開場已預抓榜單門檻：若這成績明確進不了前 20，就不打 POST（省一次 API），只顯示「未進榜」。
+  // qualifies 回 false 才跳過（門檻偏舊只會偏寬鬆，判 false 必為真不進）；回 null/true 仍照常上傳。
+  if (CloudLb.qualifies(mode, sec) === false) {
+    showLeaderboard({ afterGame: true, mode, justName: name });
+    return;
+  }
+  showLeaderboard({ afterGame: true, mode, uploading: true });
+  // 雲端上傳完成後，若玩家還停在這個面板就刷新顯示名次
+  const stillHere = () => !Game.active && !document.getElementById('overlay').hidden;
+  CloudLb.submit(name, mode, sec, errors).then(data => {
+    lastCloudError = null;
+    if (stillHere()) showLeaderboard({ afterGame: true, mode, justName: name, justRank: data.rank });
+  }).catch((err) => {
+    lastCloudError = t('localTime') + new Date().toLocaleString() + '\n' + describeCloudError(err);
+    if (stillHere()) showLeaderboard({ afterGame: true, mode, cloudError: true });
+  });
+}
+// 單題秒數格式化：0.8 秒 / 12 秒；無資料（雲端後端尚未回傳此欄）顯示「-」。
+// 防呆：單題秒數不可能 <0 或 >=3600（曾因後端欄位被誤套日期格式回傳 -2208xxxxxxxxx 大數），超出即顯示「-」。
+function fmtFindSec(v) {
+  if (v == null || isNaN(v) || v < 0 || v >= 3600) return t('noValue');
+  return t('secondsShort', { value: (+v).toFixed(1).replace(/\.0$/, '') });
+}
+// 雲端榜回傳尚未帶 fast/slow 的列（舊資料或後端未支援），用本機紀錄依 名字+秒數 補上，
+// 讓玩家至少能看到自己在這台裝置打過的每局「最快/最慢找到」。雲端已帶值就不覆蓋。
+function mergeLocalFindStats(top, mode) {
+  const local = loadLb(mode);
+  return (top || []).map(r => {
+    if (r.fast != null || r.slow != null) return r;
+    const m = local.find(l => l.name === r.name && l.sec === r.sec && (l.fast != null || l.slow != null));
+    return m ? Object.assign({}, r, { fast: m.fast, slow: m.slow }) : r;
+  });
+}
+function lbTableHtml(list) {
+  let rows = (list || []).map((r, i) =>
+    '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(r.name) + '</td><td>' + fmtTime(r.sec) +
+    '</td><td>' + (r.errors == null ? t('noValue') : r.errors) + '</td><td>' + escapeHtml(r.date || '') + '</td></tr>').join('');
+  if (!rows) rows = '<tr><td colspan="5">' + t('noRecord') + '</td></tr>';
+  return '<div class="lb-scroll"><table><tr><th>' + t('colRank') + '</th><th>' + t('colName') + '</th><th>' + t('colTime') + '</th><th>' + t('colErrors') + '</th><th>' + t('colDate') + '</th></tr>' + rows + '</table></div>';
+}
+function showLeaderboard(options) {
+  // 事件監聽器可能直接把 Event 當參數傳進來，僅取需要的欄位、其餘忽略。
+  const opt = (options && typeof options === 'object' && !(options instanceof Event)) ? options : {};
+  const afterGame = !!opt.afterGame;
+  const fromStart = opt.origin === 'start';
+  // 預設顯示哪一份：指定優先 → 遊戲中/剛結束看本局難度 → 否則看開始畫面選的難度。
+  const mode = opt.mode || ((Game.active || Game.ended) ? Game.mode : savedMode());
+  currentPanelRenderer = () => showLeaderboard(opt);
+  const tabArgs = (afterGame ? ',afterGame:true' : '') + (fromStart ? ',origin:&quot;start&quot;' : '');
+  const tabs =
+    '<div class="diff-seg" style="grid-template-columns:repeat(4,1fr);margin-bottom:12px">' +
+    '<button class="diff' + (mode === 'beginner' ? ' on' : '') + '" onclick="showLeaderboard({mode:&quot;beginner&quot;' + tabArgs + '})">' + modeShort('beginner') + '<br>' + cellsTag(25) + '</button>' +
+    '<button class="diff' + (mode === 'easy' ? ' on' : '') + '" onclick="showLeaderboard({mode:&quot;easy&quot;' + tabArgs + '})">' + modeShort('easy') + '<br>' + cellsTag(50) + '</button>' +
+    '<button class="diff' + (mode === 'normal' ? ' on' : '') + '" onclick="showLeaderboard({mode:&quot;normal&quot;' + tabArgs + '})">' + modeShort('normal') + '<br>' + cellsTag(75) + '</button>' +
+    '<button class="diff' + (mode === 'hard' ? ' on' : '') + '" onclick="showLeaderboard({mode:&quot;hard&quot;' + tabArgs + '})">' + modeShort('hard') + '<br>' + cellsTag(100) + '</button>' +
+    '</div>';
+  let note = '';
+  let noteAttr = '';
+  if (opt.uploading) note = t('uploading');
+  else if (opt.cloudError) {
+    note = t('uploadFailedLocal');
+    // 有錯誤訊息時，直接連點兩下這行字就跳出可複製的偵錯對話框（不另顯提示文字、降低誤按）；
+    // 用 onclick 自製雙擊偵測（手機 dblclick 常失效），沒有錯誤就不綁、不跳框。
+    if (lastCloudError) {
+      noteAttr = ' onclick="handleCloudErrorTap()" style="cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none"';
+    }
+  }
+  else if (opt.justName) {
+    note = opt.justRank
+      ? t('uploadRanked', { name: escapeHtml(opt.justName), rank: opt.justRank })
+      : t('uploadNoRank');
+  }
+  showPanel('<h2 class="lb-title">' + iconSvg('trophy') + t('lbTitle', { mode: modeLabel(mode) }) + '</h2>' + tabs +
+    (note ? '<p class="lb-note"' + noteAttr + '>' + note + '</p>' : '') +
+    '<div id="lbTable"><p class="lb-note">' + t('loadingCloud') + '</p></div>' +
+    '<div class="btn-row">' +
+    (afterGame
+      ? '<button onclick="startGame(&quot;' + mode + '&quot;)">' + buttonHtml('retry', t('playAgain')) + '</button><button class="secondary" onclick="Game.quit()">' + buttonHtml('exit', t('backStart')) + '</button>'
+      : fromStart
+        ? '<button class="secondary" onclick="showStartDialog()">' + buttonHtml('close', t('backStart')) + '</button>'
+        : '<button class="secondary" onclick="hideOverlay()">' + buttonHtml('close', t('close')) + '</button>') +
+    '</div>');
+  // 雲端為主、本機備援：抓不到雲端（離線/被擋）就顯示本機紀錄並標註。
+  const seq = ++showLeaderboard._seq;
+  CloudLb.top(mode).then(top => {
+    if (seq !== showLeaderboard._seq) return;          // 已切到別的分頁/畫面就不要蓋
+    const el = document.getElementById('lbTable');
+    if (el) el.innerHTML = lbTableHtml(top);
+  }).catch(() => {
+    if (seq !== showLeaderboard._seq) return;
+    const el = document.getElementById('lbTable');
+    if (el) el.innerHTML = '<p class="lb-note">' + t('cloudOffline') + '</p>' + lbTableHtml(loadLb(mode));
+  });
+}
+showLeaderboard._seq = 0;
+function mediaStateHtml() {
+  return '<div class="media-state" id="mediaState">' +
+    '<button type="button" class="ms-music' + (Music.enabled ? ' on' : '') + '" onclick="togglePanelMedia(&quot;music&quot;)">' + iconSvg('music') + ' ' + t('music') + '：' + (Music.enabled ? t('on') : t('off')) + '</button>' +
+    '<button type="button" class="ms-sound' + (Sound.enabled ? ' on' : '') + '" onclick="togglePanelMedia(&quot;sound&quot;)">' + iconSvg(Sound.enabled ? 'sound' : 'mute') + ' ' + t('sound') + '：' + (Sound.enabled ? t('on') : t('off')) + '</button>' +
+    (Speech.ok ? '<button type="button" class="ms-speak' + (Speech.enabled ? ' on' : '') + '" onclick="togglePanelMedia(&quot;speak&quot;)">' + iconSvg('speak') + ' ' + t('speak') + '：' + (Speech.enabled ? t('on') : t('off')) + '</button>' : '') +
+    '</div>';
+}
+// 面板上的音樂/音效/報數設定列：直接點擊切換，並原地刷新顯示（不重畫整個面板）。
+function togglePanelMedia(kind) {
+  if (kind === 'music') Music.toggle();
+  else if (kind === 'sound') Sound.toggle();
+  else Speech.toggle();
+  const el = document.getElementById('mediaState');
+  if (el) el.outerHTML = mediaStateHtml();
+}
+function showAbout(origin) {
+  const fromStart = origin === 'start';
+  const closeAction = fromStart ? 'showStartDialog()' : 'hideOverlay()';
+  const closeLabel = fromStart ? t('backStart') : t('close');
+  currentPanelRenderer = () => showAbout(origin);
+  showPanel('<h2>' + iconSvg('target') + t('aboutTitle') + '</h2>' +
+    '<div class="intro-card">' +
+    '<div class="rule"><b>1</b><span>' + t('about1') + '</span></div>' +
+    '<div class="rule"><b>2</b><span>' + t('about2') + '</span></div>' +
+    '<div class="rule"><b>3</b><span>' + t('about3') + '</span></div>' +
+    '<div class="rule"><b>4</b><span>' + t('about4') + '</span></div>' +
+    '<div class="rule"><b>5</b><span>' + t('about5') + '</span></div>' +
+    '<div class="rule"><b>6</b><span>' + t('about6') + '</span></div>' +
+    '</div>' +
+    mediaStateHtml() +
+    '<div class="credit">' + t('musicCredit') + '<br>' +
+    '<a href="https://opengameart.org/content/8-bit-epic-space-shooter-music" target="_blank" rel="noopener">' + t('officialMusic') + '</a> · ' +
+    '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">' + t('ccLicense') + '</a></div>' +
+    '<div class="credit"><a href="https://jikker.github.io/legal/number-hunter/privacy.html" target="_blank" rel="noopener">' + t('privacyPolicy') + '</a>' +
+    (isInApp() ? ' · <a href="#" onclick="manageAdConsent();return false;">' + t('adConsent') + '</a>' : '') +
+    '</div>' +
+    '<div class="credit ver" onclick="forceRefresh()" title="' + t('refreshTitle') + '">' + t('version', { version: APP_VERSION }) + '</div>' +
+    '<div class="btn-row"><button class="secondary" onclick="' + closeAction + '">' + buttonHtml('close', closeLabel) + '</button></div>');
+}
+// 是否在原生 App 內（有 JS↔Swift 橋接）；網頁版回傳 false，不顯示「管理廣告同意」。
+function isInApp() {
+  return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.adBridge);
+}
+// 在 App 內請原生端彈出 Google UMP 的「隱私選項 / 管理同意」表單。
+function manageAdConsent() {
+  try { window.webkit.messageHandlers.adBridge.postMessage({ type: 'manageConsent' }); } catch (e) {}
+}
+function selectMode(mode) {
+  if (!MODE[mode]) return;
+  localStorage.setItem('colorhunter_mode', mode);
+  if (N !== MODE[mode]) { N = MODE[mode]; draw(); }   // 換難度即時重畫棋盤（格數/大小改變）
+  showStartDialog();                                   // 重新渲染面板：更新高亮與規則格數
+}
+let __pendingStart = false;
+let __pendingStartMode = null;
+function startGame(mode) {                              // 用目前選定難度（N）開始；排行榜可指定目前榜單難度
+  const selectedMode = MODE[mode] ? mode : null;
+  // iOS App：先讓原生決定是否播插頁廣告，**廣告關閉後**才真正開始遊戲（避免遊戲在廣告蓋著時就跑）。
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.adBridge) {
+    __pendingStart = true;
+    __pendingStartMode = selectedMode;
+    try { window.webkit.messageHandlers.adBridge.postMessage({ type: 'startGame' }); }
+    catch (e) { proceedGame(); return; }
+    setTimeout(function () { if (__pendingStart) proceedGame(); }, 30000); // 安全網：原生若沒回也不卡住
+  } else {
+    Game.start(selectedMode);                          // 網頁版：直接開始（無廣告）
+  }
+}
+// 由原生在「廣告關閉後 / 這次不需廣告」時呼叫，才真正開始遊戲。
+function proceedGame() {
+  if (!__pendingStart) return;
+  const mode = __pendingStartMode;
+  __pendingStart = false;
+  __pendingStartMode = null;
+  Game.start(mode);
+}
+window.proceedGame = proceedGame;
+function showStartDialog() {
+  const mode = savedMode();
+  const seg =
+    '<div class="diff-seg" style="grid-template-columns:repeat(4,1fr)">' +
+    '<button class="diff' + (mode === 'beginner' ? ' on' : '') + '" onclick="selectMode(&quot;beginner&quot;)">' + modeShort('beginner') + '<br>' + cellsTag(25) + '</button>' +
+    '<button class="diff' + (mode === 'easy' ? ' on' : '') + '" onclick="selectMode(&quot;easy&quot;)">' + modeShort('easy') + '<br>' + cellsTag(50) + '</button>' +
+    '<button class="diff' + (mode === 'normal' ? ' on' : '') + '" onclick="selectMode(&quot;normal&quot;)">' + modeShort('normal') + '<br>' + cellsTag(75) + '</button>' +
+    '<button class="diff' + (mode === 'hard' ? ' on' : '') + '" onclick="selectMode(&quot;hard&quot;)">' + modeShort('hard') + '<br>' + cellsTag(100) + '</button>' +
+    '</div>';
+  currentPanelRenderer = () => showStartDialog();
+  showPanel('<div class="start-shell">' +
+    '<section class="start-info">' +
+    '<h2>' + iconSvg('target') + t('title') + '</h2>' +
+    '<div class="intro-card">' +
+    '<div class="rule"><b>' + targetCountFor(N) + '</b><span>' + t('startRule1', { count: N, targets: targetCountFor(N) }) + '</span></div>' +
+    '<div class="rule"><b>⏱</b><span>' + t('startRule2') + '</span></div>' +
+    '<div class="rule"><b>3</b><span>' + t('startRule3') + '</span></div>' +
+    '</div>' +
+    '</section>' +
+    '<section class="start-controls">' +
+    '<div class="diff-label">' + t('difficultyLabel') + '</div>' + seg +
+    '<div class="btn-row actions">' +
+    '<button class="secondary" onclick="showLeaderboard({origin:&quot;start&quot;})">' + buttonHtml('trophy', t('leaderboard')) + '</button>' +
+    '<button onclick="startGame()">' + buttonHtml('play', t('startGame')) + '</button>' +
+    '<button class="secondary" onclick="showAbout(&quot;start&quot;)">' + buttonHtml('info', t('howTo')) + '</button></div>' +
+    mediaStateHtml() +
+    '<div class="credit ver" onclick="forceRefresh()" title="' + t('refreshTitle') + '">' + t('version', { version: APP_VERSION }) + '</div>' +
+    '</section>' +
+    '</div>', 'start-panel');
+  requestOpeningAudio();
+}
+
+// ---------- 選單 ----------
+function toggleMenu(force) {
+  const m = document.getElementById('menu');
+  m.hidden = force !== undefined ? !force : !m.hidden;
+}
+function doPrint() {
+  toggleMenu(false);
+  Zoom.reset();
+  window.print();
+}
+// 點「版本」文字 → 強制重新整理：帶上 cache-busting 參數重新導向，繞過瀏覽器/CDN 快取抓最新檔案。
+function forceRefresh() {
+  try {
+    const u = new URL(location.href);
+    u.searchParams.set('_', Date.now());
+    location.replace(u.toString());
+  } catch (e) {
+    location.reload();
+  }
+}
+
+// ---------- 初始化 ----------
+const regions = [];               // {num, shape, found, center, area, touchRadius, neighbors}，draw() 時填入
+const regionByNum = new Map();     // 目前題號 → 對應格子
+draw();
+installOverlayTouchLock();
+Zoom.init();
+installBoardTap();
+Music.init();
+Layout.update();
+function syncSoundButtons() {
+  for (const id of ['soundBtn', 'hudSoundBtn']) {
+    const b = document.getElementById(id);
+    if (!b) continue;
+    b.innerHTML = iconSvg(Sound.enabled ? 'sound' : 'mute');
+    b.setAttribute('aria-label', Sound.enabled ? t('soundOn') : t('soundOff'));
+    b.title = Sound.enabled ? t('soundOn') : t('soundOff');
+    b.classList.toggle('off', !Sound.enabled);
+    b.classList.toggle('on', Sound.enabled);   // 開＝橘色 / 關＝白色
+  }
+}
+Music.refresh();
+syncSoundButtons();
+Speech.init();
+updateStaticText();
+// ---------- 開場音訊（行動瀏覽器 / Safari 自動播放限制）----------
+// 開場畫面一建立就嘗試播放背景音樂；若瀏覽器允許自動播放，使用者打開畫面就有音樂。
+// 行動裝置與 Safari 多半會擋無手勢播放，因此第一個開始畫面手勢會直接有聲播放 BGM，
+// 同時 resume WebAudio 並打一個很短的開場音效，確保進遊戲前音樂與音效都已可立即響。
+let audioPrimed = false;
+let openingCuePlayed = false;
+function cueOpeningSound() {
+  if (openingCuePlayed || !Sound.enabled) return;
+  if (!Sound.ctx || Sound.ctx.state !== 'running') return;
+  openingCuePlayed = true;
+  Sound.open();
+}
+function requestOpeningAudio() {
+  Music.load();
+  Music.play();
+  cueOpeningSound();
+}
+function primeAudio() {
+  let resumed = null;
+  if (!audioPrimed) {
+    audioPrimed = true;
+    try { resumed = Sound.ensure(); } catch (e) {}
+  }
+  requestOpeningAudio();
+  if (resumed && resumed.then) resumed.then(cueOpeningSound).catch(() => {});
+}
+for (const evt of ['pointerdown', 'touchstart', 'mousedown', 'keydown']) {
+  document.addEventListener(evt, primeAudio, { capture: true, once: true });
+}
+let startScreenMusicPausedByBlur = false;
+function pauseForPageBlur() {
+  if (Game.active && !Game.ended) {
+    Game.pause();
+    return;
+  }
+  if (!Game.active && !Game.ended && Music.ok && Music.el && !Music.el.paused) {
+    Music.pause();
+    startScreenMusicPausedByBlur = true;
+  }
+}
+function resumeStartScreenMusic() {
+  if (document.hidden || !startScreenMusicPausedByBlur || Game.active || Game.ended) return;
+  startScreenMusicPausedByBlur = false;
+  Music.play();
+}
+document.getElementById('startBtn').addEventListener('click', showStartDialog);
+document.getElementById('quitBtn').addEventListener('click', () => Game.quit());
+document.getElementById('pauseBtn').addEventListener('click', () => Game.togglePause());
+document.getElementById('resumeBtn').addEventListener('click', () => Game.resume());
+document.addEventListener('keydown', e => {       // 桌機：空白鍵 / P / Esc 切換暫停
+  if (!Game.active || Game.ended) return;
+  if (!document.getElementById('overlay').hidden) return;   // 有彈窗時不攔
+  const tag = (e.target && e.target.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (e.key === ' ' || e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+    e.preventDefault();
+    Game.togglePause();
+  }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseForPageBlur();
+  else resumeStartScreenMusic();
+});
+window.addEventListener('blur', pauseForPageBlur);   // 切走時清掉 Ctrl 狀態，避免卡住
+window.addEventListener('focus', resumeStartScreenMusic);
+window.addEventListener('resize', () => { Layout.update(); Zoom.clamp(); Zoom.apply(); });
+window.addEventListener('orientationchange', () => setTimeout(() => { Layout.update(); Zoom.clamp(); Zoom.apply(); }, 250));
+document.getElementById('lbBtn').addEventListener('click', () => showLeaderboard());
+document.getElementById('soundBtn').addEventListener('click', () => Sound.toggle());
+document.getElementById('speakBtn').addEventListener('click', () => Speech.toggle());
+document.getElementById('musicBtn').addEventListener('click', () => Music.toggle());
+document.getElementById('langBtn').addEventListener('click', toggleLanguage);
+document.getElementById('menuBtn').addEventListener('click', e => { e.stopPropagation(); showAbout(); });
+document.getElementById('hudLbBtn').addEventListener('click', () => showLeaderboard());
+document.getElementById('hudLangBtn').addEventListener('click', toggleLanguage);
+document.getElementById('hudSoundBtn').addEventListener('click', () => Sound.toggle());
+document.getElementById('hudSpeakBtn').addEventListener('click', () => Speech.toggle());
+document.getElementById('hudMusicBtn').addEventListener('click', () => Music.toggle());
+document.getElementById('hudMenuBtn').addEventListener('click', e => { e.stopPropagation(); showAbout(); });
+document.getElementById('mReload').addEventListener('click', () => location.reload());
+document.getElementById('mPrint').addEventListener('click', doPrint);
+document.getElementById('mAbout').addEventListener('click', () => { toggleMenu(false); showAbout(); });
+document.addEventListener('click', e => {
+  const m = document.getElementById('menu');
+  if (!m.hidden && !m.contains(e.target)) toggleMenu(false);
+});
+showStartDialog();
+CloudLb.prefetchAll();   // 開頁就背景預抓全難度榜單，開始畫面開排行榜即秒開、切頁籤不再分批打 API
+</script>
+</body>
+</html>
