@@ -139,7 +139,7 @@
   }
   .hud-main {
     display: grid;
-    grid-template-columns: auto 58px 58px max-content 52px;
+    grid-template-columns: auto 58px 58px max-content max-content;
     align-items: center;
     justify-content: center;
     gap: 8px;
@@ -530,7 +530,7 @@
       min-height: 52px;
     }
     .hud-main {
-      grid-template-columns: 44px 52px max-content 38px;
+      grid-template-columns: 44px 52px max-content max-content;
       justify-content: start;
       gap: 5px;
     }
@@ -597,7 +597,7 @@
       max-width: 24px;
     }
     .hud-main {
-      grid-template-columns: 40px 50px max-content 34px;
+      grid-template-columns: 40px 50px max-content max-content;
       gap: 4px;
     }
     .hud .target-num {
@@ -806,7 +806,7 @@
 </style>
 </head>
 <body>
-  <audio id="bgm" src="bgm.mp3?v7" loop preload="auto"></audio>
+  <audio id="bgm" src="bgm.mp3?v8" loop preload="auto"></audio>
 <svg class="icon-sprite" width="0" height="0" aria-hidden="true" focusable="false">
   <symbol id="icon-target" viewBox="0 0 24 24">
     <circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="12" r="3.2"></circle>
@@ -925,10 +925,10 @@
 'use strict';
 /*
  * 顏色獵人（Color Hunter）— 由「67 獵人」(T-161，本身 fork 自「數字獵人」T-152) 改版的找色反應遊戲。
- * 玩法：棋盤（A4 隨機 Voronoi 格）每格有「底色」與「顏色文字」。多數格底色＝文字（相符）；少數「目標格」
- *       底色與文字對不上（例：底綠、字寫「藍」）。每局隨機選一個目標顏色詞、語音念出它，玩家要最快點出
- *       所有「文字＝目標詞但底色不是該色」的格；另有「陷阱格」（文字＝目標詞且底色也＝該色，相符不可點），
- *       逼玩家看底色而非只讀字。點錯（點到相符格）扣命，錯 3 次結束；找完全部目標格的用時越短排名越前。
+ * 玩法（v2）：棋盤（A4 隨機 Voronoi 格）每格有「底色」與「顏色文字」，開局「全部格子的底色與文字都對不上」
+ *       （例：底綠、字寫「藍」）。語音隨機念出一個顏色詞，玩家要點出「文字寫著那個詞」的格子；點對後該格
+ *       底色就補成跟文字一樣的顏色（對上了、鎖綠框），接著念下一個詞，直到把所有格子都對上即過關。
+ *       點錯（文字不是念出的那個色）扣命，錯 3 次結束；把全部格子對上的用時越短排名越前。配色為淡粉柔和色系。
  * 版面生成沿用數字獵人：圓形格 + Voronoi 切割、群聚+均勻種子混合、細長格文字沿長軸旋轉、viewBox 以 mm 為單位（列印即 A4）。
  *
  * === 顏色獵人自身版本史（與 67 獵人 / 數字獵人各自獨立計算）===
@@ -937,7 +937,7 @@
  *     全新後端 Sheet「顏色獵人排行榜」與 HMAC 密鑰；保留 67 獵人的四難度（格數）、雲端排行榜、捏合縮放、A4 列印、雙語、音效/音樂/語音開關。
  */
 
-const APP_VERSION = 'v1';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v1：fork 成找「底色與文字對不上」的格子
+const APP_VERSION = 'v2';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v2：改成「全部對不上→聽語音念色→點出文字寫該色的格→底色補成跟文字一樣→全部對上過關」，配色改淡粉柔和、換背景音樂
 const W = 210, H = 297;     // A4 mm
 // 總格數（圓形 + 多邊形）：新手 25 格(1-25)、簡單 50 格(1-50)、普通 75 格(1-75)、困難 100 格(1-100)。
 // 新手/簡單模式格子更大更好點，手機族群尤其受用；難度記在 localStorage，重進沿用。
@@ -961,7 +961,7 @@ const I18N = {
     redraw: '重劃一張新棋盤',
     printA4: '列印 A4 紙',
     aboutMenu: '玩法說明 / 音樂版權',
-    targetArrow: '找出 →',
+    targetArrow: '點出 →',
     paused: '已暫停',
     pausedSub: '時間已停止 · 棋盤已隱藏',
     pause: '暫停',
@@ -972,7 +972,7 @@ const I18N = {
     zoomOut: '縮小',
     zoomReset: '回復原始大小',
     startGame: '開始遊戲',
-    ctaHint: '聽語音念出的顏色，在棋盤上找出「文字與底色對不上」的那幾格！（可捏合放大）',
+    ctaHint: '聽語音念出的顏色，點出「文字」寫著那個顏色的格子，把它的底色補成一樣！（可捏合放大）',
     musicOn: '背景音樂開啟',
     musicOff: '背景音樂關閉',
     soundOn: '音效開啟',
@@ -993,19 +993,19 @@ const I18N = {
     modeEasyShort: '簡單',
     modeNormalShort: '普通',
     modeHardShort: '困難',
-    wrongTap: '❌ 這格底色與「{wrong}」相符，不是要找的（再錯 {left} 次就結束）',
-    foundTarget: '✅ 找到 {found}/{total} 格，還剩 {remain} 格',
+    wrongTap: '❌ 這格文字不是「{wrong}」（再錯 {left} 次就結束）',
+    foundTarget: '✅ 對上 {found}/{total} 格，還剩 {remain} 格',
     remainingTargets: '剩 {remain}/{total}',
     foundStatsNone: '📊 每題耗時：尚未找到任何數字。',
     foundStats: '📊 每題耗時：最快 <b>{fastSec}</b>（數字 {fastNum}），最慢 <b>{slowSec}</b>（數字 {slowNum}），平均 <b>{avgSec}</b>。',
     secondsShort: '{value} 秒',
     gameOver: '遊戲結束',
-    loseDetail: '錯了 3 次！最後點到「<b>{wrong}</b>」相符格，還有 <b>{remain}</b> 格沒找到。',
+    loseDetail: '錯了 3 次！還有 <b>{remain}</b> 格的顏色與文字沒對上。',
     elapsedProgress: '⏱ 用時 {time}，完成 {found}/{total} 格。',
     playAgain: '再玩一次',
     leaveGame: '離開遊戲',
-    winTitle: '全部找到了！',
-    winDetail: '⏱ 你花了 <b>{time}</b> 找出全部 {targets} 格對不上的，錯誤 {errors} 次。',
+    winTitle: '全部對上了！',
+    winDetail: '⏱ 你花了 <b>{time}</b> 把全部 {targets} 格的顏色與文字對上，錯誤 {errors} 次。',
     leaveName: '留下名字進排行榜：',
     namePlaceholder: '你的名字（最多 8 字）',
     saveLeaderboard: '存入排行榜',
@@ -1036,20 +1036,20 @@ const I18N = {
     lbTitle: '排行榜 · {mode}',
     aboutTitle: '顏色獵人 — 玩法',
     about1: '按「開始遊戲」，計時立刻開始。',
-    about2: '每格有底色與一個顏色字。多數相符，少數「底色與字對不上」——把這些對不上的格全找出來！',
-    about3: '點錯（點到相符格）扣 1 條命，錯 3 次結束；越快找完排名越前。',
-    about4: '對不上的格可能藏在很小的格子裡；找到的會加上醒目的綠框，HUD 會顯示還剩幾格。',
+    about2: '開局每格的底色和文字都「對不上」。聽語音念出的顏色，點出文字寫著那個顏色的格子。',
+    about3: '點對了，那格底色就會變成跟文字一樣（對上了、鎖綠框）；把全部格子都對上就過關。',
+    about4: '點錯（文字不是念出的那個色）扣 1 條命，錯 3 次結束；越快全對上排名越前。',
     about5: '字太小可兩指捏合放大，放大後單指拖移棋盤。',
     about6: '右上選單可查看玩法說明與音樂版權。',
-    musicCredit: '背景音樂：HydroGene「8-bit Epic Space Shooter Music」（OpenGameArt，CC0）',
-    officialMusic: '官方音樂頁',
+    musicCredit: '背景音樂：原創柔和循環曲（為本遊戲合成，公眾領域 CC0）',
+    officialMusic: '關於本曲',
     ccLicense: 'Creative Commons CC0',
     privacyPolicy: '隱私權政策',
     adConsent: '管理廣告同意',
     version: '版本 {version}',
     refreshTitle: '點我強制刷新頁面（抓最新版）',
-    startRule1: '在 {count} 格中找出全部 {targets} 格「底色與字對不上」的。',
-    startRule2: '計時進行，越快找完越好。',
+    startRule1: '聽語音念出的顏色，點出「文字」寫著它的格子。',
+    startRule2: '點對 → 底色補成跟文字一樣；把 {count} 格全對上就贏。',
     startRule3: '有三次錯誤機會，錯 3 次結束。',
     difficultyLabel: '選擇難度（格子越多越難找）',
     howTo: '玩法說明'
@@ -1068,7 +1068,7 @@ const I18N = {
     redraw: 'Draw a new board',
     printA4: 'Print A4 sheet',
     aboutMenu: 'How to play / music credit',
-    targetArrow: 'Find →',
+    targetArrow: 'Tap →',
     paused: 'Paused',
     pausedSub: 'Timer stopped · board hidden',
     pause: 'Pause',
@@ -1079,7 +1079,7 @@ const I18N = {
     zoomOut: 'Zoom out',
     zoomReset: 'Reset zoom',
     startGame: 'Start Game',
-    ctaHint: 'Listen for the spoken color, then find the cells whose word and background color don’t match! Pinch to zoom.',
+    ctaHint: 'Listen for the spoken color, then tap the cell whose WORD says that color to fix its background! Pinch to zoom.',
     musicOn: 'Background music on',
     musicOff: 'Background music off',
     soundOn: 'Sound effects on',
@@ -1100,19 +1100,19 @@ const I18N = {
     modeEasyShort: 'Easy',
     modeNormalShort: 'Normal',
     modeHardShort: 'Hard',
-    wrongTap: '❌ That cell’s color matches “{wrong}”. Game over after {left} more mistake(s).',
-    foundTarget: '✅ Found {found}/{total}. {remain} left.',
-    remainingTargets: '{remain}/{total} left',
+    wrongTap: '❌ That word isn’t “{wrong}”. Game over after {left} more mistake(s).',
+    foundTarget: '✅ Matched {found}/{total}. {remain} left.',
+    remainingTargets: '{remain}/{total}',
     foundStatsNone: '📊 Per-number time: no numbers found yet.',
     foundStats: '📊 Per-number time: fastest <b>{fastSec}</b> (number {fastNum}), slowest <b>{slowSec}</b> (number {slowNum}), average <b>{avgSec}</b>.',
     secondsShort: '{value}s',
     gameOver: 'Game Over',
-    loseDetail: 'Three mistakes. Last tap was a matching “<b>{wrong}</b>” cell; <b>{remain}</b> left to find.',
+    loseDetail: 'Three mistakes! <b>{remain}</b> cells still have mismatched color and word.',
     elapsedProgress: '⏱ Time {time}, completed {found}/{total} cells.',
     playAgain: 'Play Again',
     leaveGame: 'Leave Game',
-    winTitle: 'All Found!',
-    winDetail: '⏱ You found all {targets} mismatched cells in <b>{time}</b>, mistakes: {errors}.',
+    winTitle: 'All Matched!',
+    winDetail: '⏱ You matched all {targets} cells in <b>{time}</b>, mistakes: {errors}.',
     leaveName: 'Enter your name for the leaderboard:',
     namePlaceholder: 'Your name (8 chars max)',
     saveLeaderboard: 'Save Score',
@@ -1143,20 +1143,20 @@ const I18N = {
     lbTitle: 'Leaderboard · {mode}',
     aboutTitle: 'Color Hunter — How to Play',
     about1: 'Tap “Start Game”; the timer starts immediately.',
-    about2: 'Each cell has a background color and a color word. Most match; a few don’t — find every mismatched cell!',
-    about3: 'A wrong tap costs 1 life. Three mistakes end the game. Faster clears rank higher.',
-    about4: 'A found cell gets a bright green outline, and the HUD shows how many remain.',
+    about2: 'Every cell starts mismatched (background ≠ word). Listen for the spoken color, then tap the cell whose word says it.',
+    about3: 'A correct tap recolors that cell’s background to match its word (locked with a green outline). Match every cell to win.',
+    about4: 'A wrong tap (word ≠ the spoken color) costs 1 life. Three mistakes end the game. Faster clears rank higher.',
     about5: 'Pinch to zoom when numbers are small, then drag the board with one finger.',
     about6: 'Use the top menu to view instructions and music credits.',
-    musicCredit: 'Music: “8-bit Epic Space Shooter Music” by HydroGene (OpenGameArt, CC0)',
-    officialMusic: 'Official music page',
+    musicCredit: 'Music: original soft looping tune (synthesized for this game, public domain CC0)',
+    officialMusic: 'About this track',
     ccLicense: 'Creative Commons CC0',
     privacyPolicy: 'Privacy Policy',
     adConsent: 'Manage ad consent',
     version: 'Version {version}',
     refreshTitle: 'Force refresh and load the latest version',
-    startRule1: 'Find all {targets} mismatched cells among {count}.',
-    startRule2: 'You are timed — clear them fast!',
+    startRule1: 'Listen for the spoken color, then tap the cell whose word says it.',
+    startRule2: 'Correct tap fixes the background. Match all {count} cells to win.',
     startRule3: 'Three mistakes and the game is over.',
     difficultyLabel: 'Choose difficulty (more cells = harder)',
     howTo: 'How to Play'
@@ -1635,42 +1635,20 @@ function hasLabelOverlap(model) {
   return false;
 }
 
-// 顏色獵人：本局隨機選一個「目標顏色詞」TARGET_KEY（語音會唸它）；棋盤多數格底色＝文字（相符），
-// 少數「目標格」文字＝目標詞但底色是別的顏色（對不上）——要找的就是這些；另放幾格「陷阱」
-// （文字＝目標詞且底色也＝目標色，相符、不可點），逼玩家看底色而非只讀字。回傳每格 spec 陣列。
-let TARGET_KEY = null;
+// 顏色獵人 v2：開局「全部格子的底色與文字都對不上」（fillKey ≠ wordKey）。遊戲過程語音隨機念出一個
+// 顏色詞，玩家點出「文字寫著那個詞」的格子；點對後該格底色補成跟文字一樣（對上、鎖定），再念下一個詞，
+// 直到把所有格子都對上即過關。回傳每格 spec：{fillKey(底色), wordKey(文字), isTarget(保留欄位，恆 false)}。
 function targetCountFor(total) {
-  return Math.max(1, Math.round((Number(total) || 0) * 0.12));
+  return Number(total) || 0;   // v2：要對上的目標＝全部格子
 }
 function makeBoardCells() {
-  const tIdx = Math.floor(Math.random() * COLORS.length);
-  const target = COLORS[tIdx];
-  TARGET_KEY = target.key;
   const cells = new Array(N).fill(null);
-  const slots = Array.from({ length: N }, (_, i) => i);
-  for (let i = slots.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = slots[i];
-    slots[i] = slots[j];
-    slots[j] = tmp;
-  }
-  const others = COLORS.filter(c => c.key !== target.key);
-  let p = 0;
-  const targetCount = Math.min(N, targetCountFor(N));
-  // 目標格：文字＝目標詞、底色＝非目標的隨機顏色（這就是「對不上」要找的格）
-  for (let i = 0; i < targetCount && p < N; i++) {
-    const wrong = others[Math.floor(Math.random() * others.length)];
-    cells[slots[p++]] = { fillKey: wrong.key, wordKey: target.key, isTarget: true };
-  }
-  // 陷阱格：文字＝目標詞、底色＝目標色（相符，不是目標，不可點）
-  const trapCount = Math.min(N - p, Math.max(1, Math.round(targetCount * 0.8)));
-  for (let i = 0; i < trapCount && p < N; i++) {
-    cells[slots[p++]] = { fillKey: target.key, wordKey: target.key, isTarget: false };
-  }
-  // 其餘格：底色與文字相符的隨機顏色（永遠不是「目標詞＋錯底色」，故不會誤成目標）
-  for (; p < N; p++) {
-    const c = COLORS[Math.floor(Math.random() * COLORS.length)];
-    cells[slots[p]] = { fillKey: c.key, wordKey: c.key, isTarget: false };
+  for (let i = 0; i < N; i++) {
+    const word = COLORS[Math.floor(Math.random() * COLORS.length)];
+    // 底色挑一個「跟文字不同」的顏色 → 開局每格都對不上
+    let fill = word;
+    while (fill.key === word.key) fill = COLORS[Math.floor(Math.random() * COLORS.length)];
+    cells[i] = { fillKey: fill.key, wordKey: word.key, isTarget: false };
   }
   return cells;
 }
@@ -2086,17 +2064,19 @@ const Music = {
 // 規則：棋盤每格有「底色」與「文字（顏色名）」；多數相符，少數目標格底色與文字對不上，
 //       語音唸出目標文字，玩家要最快找出所有對不上的目標格；點錯扣 1 條命，錯 3 次結束。
 // 常見、好區分的顏色（依使用者要求挑常見色）。每格底色 = 某色 hex，文字 = 某色名（中／英）。
+// v2：改成柔和淡粉色系（使用者要求「淡粉一點，原本的顏色好醜」）。全為淺色 → 文字一律深色，
+//     開局每格底色與文字「對不上」、點對後底色補成跟文字一樣，淺底深字始終清楚可讀。
 const COLORS = [
-  { key: 'red',    hex: '#ef4444', zh: '紅', en: 'Red' },
-  { key: 'orange', hex: '#f97316', zh: '橙', en: 'Orange' },
-  { key: 'yellow', hex: '#facc15', zh: '黃', en: 'Yellow' },
-  { key: 'green',  hex: '#22c55e', zh: '綠', en: 'Green' },
-  { key: 'blue',   hex: '#3b82f6', zh: '藍', en: 'Blue' },
-  { key: 'purple', hex: '#a855f7', zh: '紫', en: 'Purple' },
-  { key: 'pink',   hex: '#ec4899', zh: '粉', en: 'Pink' },
-  { key: 'brown',  hex: '#92400e', zh: '棕', en: 'Brown' },
-  { key: 'gray',   hex: '#9ca3af', zh: '灰', en: 'Gray' },
-  { key: 'black',  hex: '#1f2937', zh: '黑', en: 'Black' }
+  { key: 'red',    hex: '#f29ca3', zh: '紅', en: 'Red' },
+  { key: 'orange', hex: '#f7c193', zh: '橙', en: 'Orange' },
+  { key: 'yellow', hex: '#f2e29a', zh: '黃', en: 'Yellow' },
+  { key: 'green',  hex: '#a9ddb0', zh: '綠', en: 'Green' },
+  { key: 'blue',   hex: '#a6c8ef', zh: '藍', en: 'Blue' },
+  { key: 'purple', hex: '#cbb5ec', zh: '紫', en: 'Purple' },
+  { key: 'pink',   hex: '#f6bcdb', zh: '粉', en: 'Pink' },
+  { key: 'brown',  hex: '#cfa98b', zh: '棕', en: 'Brown' },
+  { key: 'gray',   hex: '#d0d5db', zh: '灰', en: 'Gray' },
+  { key: 'black',  hex: '#7c8595', zh: '黑', en: 'Black' }
 ];
 const COLOR_BY_KEY = {};
 for (const _c of COLORS) COLOR_BY_KEY[_c.key] = _c;
@@ -2478,13 +2458,20 @@ function escapeHtml(s) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function markFoundTarget(r) {
-  // 找到的目標格：保留原底色、加醒目綠色粗框＋打勾感，文字加白描邊確保看得清。
+  // v2：點對的格子「對上了」——底色補成跟文字相同的顏色，文字色依新底色重算，加綠色粗框鎖定＋文字描邊。
+  const hex = colorHex(r.wordKey);
+  r.shape.setAttribute('fill', hex);
+  r.shape.dataset.baseFill = hex;
+  r.baseFill = hex;
+  const ink = inkFor(r.wordKey);
+  r.baseInk = ink;
   r.shape.setAttribute('stroke', '#16a34a');
   r.shape.setAttribute('stroke-width', '1.6');
   r.shape.classList.add('found');
   if (r.text) {
+    r.text.setAttribute('fill', ink);
     r.text.setAttribute('font-weight', '900');
-    r.text.setAttribute('stroke', (r.baseInk === '#ffffff') ? '#111827' : '#ffffff');
+    r.text.setAttribute('stroke', (ink === '#ffffff') ? '#111827' : '#ffffff');
     r.text.setAttribute('stroke-width', '0.6');
     r.text.setAttribute('paint-order', 'stroke');
   }
@@ -2512,7 +2499,7 @@ const Game = {
     const selectedMode = MODE[mode] ? mode : savedMode();
     localStorage.setItem('colorhunter_mode', selectedMode);
     if (N !== MODE[selectedMode]) N = MODE[selectedMode];
-    draw();                       // 每一局重畫全新棋盤：目標顏色詞與各格底色／文字全新（draw 內設好 TARGET_KEY）
+    draw();                       // 每一局重畫全新棋盤：每格底色／文字全新、開局全部對不上
     this.mode = selectedMode;      // 記住本局難度，結算時存入對應排行榜
     CloudLb.prefetchAll();        // 開場預抓全難度榜單（背景、不 await），結算時用來判斷要不要上傳
     this.active = true;
@@ -2522,16 +2509,30 @@ const Game = {
     document.body.classList.add('gaming');
     Layout.update();
     this.found = 0; this.errors = 0;
-    this.targetTotal = targetCountFor(N);
-    this.target = TARGET_KEY;     // 本局要找的「目標顏色詞」key
+    this.targetTotal = N;         // v2：要把全部格子都對上
+    this.target = null;
     this.t0 = Date.now();
     this.tick = setInterval(() => this.showTime(), 100);   // 反應遊戲：100ms 更新計時，更跟手
     document.getElementById('hud').hidden = false;
-    this.updateTargetDisplay();   // HUD 顯示目標顏色詞
     this.updateHud();
     Sound.seq([523, 784]);
-    Speech.say(this.target);      // 開場念出目標顏色詞（語音）
+    this.nextWord();              // 選出第一個目標顏色詞、HUD 顯示並語音念出
     Music.play();
+  },
+  // 從「還沒對上的格子」裡挑一個顏色詞當下一個目標：HUD 顯示＋語音念出；盡量不連續念同一個詞（除非只剩它）。
+  nextWord() {
+    const seen = {};
+    const remain = [];
+    for (const r of regions) {
+      if (!r.found && !seen[r.wordKey]) { seen[r.wordKey] = 1; remain.push(r.wordKey); }
+    }
+    if (!remain.length) { this.target = null; this.updateTargetDisplay(); return false; }
+    let pool = remain;
+    if (remain.length > 1 && this.target) pool = remain.filter(k => k !== this.target);
+    this.target = pool[Math.floor(Math.random() * pool.length)];
+    this.updateTargetDisplay();
+    Speech.say(this.target);      // 念出目標顏色詞（語音）
+    return true;
   },
   reset() {
     clearInterval(this.tick);
@@ -2593,29 +2594,30 @@ const Game = {
   tap(r, opts) {
     if (!this.active || this.paused || r.found) return;
     if (!(opts && opts.force) && Zoom.suppressed()) return;         // 拖移/捏合手勢結尾不算點擊
-    if (r.isTarget) {                               // 找到「底色與文字對不上」的目標格 → 高亮保留，全部找完才過關
+    if (this.target && r.wordKey === this.target) { // 點到「文字＝目前念出的顏色詞」→ 對上：底色補成跟文字一樣、鎖定
       this.found++;
       r.found = true;
       markFoundTarget(r);
       Sound.correct();
       this.updateHud();
-      if (this.found >= this.targetTotal) {
+      if (this.found >= this.targetTotal) {         // 全部格子都對上 → 過關
         hideToast();
         this.win();
       } else {
+        this.nextWord();                            // 念下一個顏色詞
         showToast(t('foundTarget', {
           found: this.found,
           total: this.targetTotal,
           remain: this.targetsRemaining()
         }), 'ok');
       }
-    } else {                                         // 點到相符格（底色＝文字）→ 扣命
+    } else {                                         // 點到文字不是目前念出的詞 → 扣命
       this.errors++;
       Sound.wrong();
       flashWrong(r);
       this.updateHud();
-      if (this.errors >= 3) this.lose(colorWord(r.wordKey));
-      else showToast(t('wrongTap', { wrong: colorWord(r.wordKey), left: 3 - this.errors }));
+      if (this.errors >= 3) this.lose(colorWord(this.target));
+      else showToast(t('wrongTap', { wrong: colorWord(this.target), left: 3 - this.errors }));
     }
   },
   activeMs() {
@@ -2882,7 +2884,6 @@ function showAbout(origin) {
     '</div>' +
     mediaStateHtml() +
     '<div class="credit">' + t('musicCredit') + '<br>' +
-    '<a href="https://opengameart.org/content/8-bit-epic-space-shooter-music" target="_blank" rel="noopener">' + t('officialMusic') + '</a> · ' +
     '<a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener">' + t('ccLicense') + '</a></div>' +
     '<div class="credit"><a href="https://jikker.github.io/legal/number-hunter/privacy.html" target="_blank" rel="noopener">' + t('privacyPolicy') + '</a>' +
     (isInApp() ? ' · <a href="#" onclick="manageAdConsent();return false;">' + t('adConsent') + '</a>' : '') +
@@ -2942,8 +2943,8 @@ function showStartDialog() {
     '<section class="start-info">' +
     '<h2>' + iconSvg('target') + t('title') + '</h2>' +
     '<div class="intro-card">' +
-    '<div class="rule"><b>' + targetCountFor(N) + '</b><span>' + t('startRule1', { count: N, targets: targetCountFor(N) }) + '</span></div>' +
-    '<div class="rule"><b>⏱</b><span>' + t('startRule2') + '</span></div>' +
+    '<div class="rule"><b>🎧</b><span>' + t('startRule1') + '</span></div>' +
+    '<div class="rule"><b>' + N + '</b><span>' + t('startRule2', { count: N }) + '</span></div>' +
     '<div class="rule"><b>3</b><span>' + t('startRule3') + '</span></div>' +
     '</div>' +
     '</section>' +
