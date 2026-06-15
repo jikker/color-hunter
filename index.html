@@ -930,7 +930,7 @@
  *       的顏色」、點出「文字顏色＝念出那個色」的格子（看顏色、別管字寫什麼）；點對後該格白底就補滿成那個
  *       顏色（對上了、鎖綠框），接著念下一個色，直到把所有格子都對上即過關。點對時不跳成功提示，HUD（toast）
  *       只在點錯時當提醒。（v3 舊玩法是反過來：點「文字寫著該詞」的格＝按字義。）
- *       點錯（文字不是念出的那個色）扣命，錯 3 次結束；把全部格子對上的用時越短排名越前。配色為淡粉柔和色系。
+ *       點錯（文字不是念出的那個色）扣命，錯 3 次結束；把全部格子對上的用時越短排名越前。對上後填滿用該色的正確鮮明色。
  * 版面生成沿用數字獵人：圓形格 + Voronoi 切割、群聚+均勻種子混合、細長格文字沿長軸旋轉、viewBox 以 mm 為單位（列印即 A4）。
  *
  * === 顏色獵人自身版本史（與 67 獵人 / 數字獵人各自獨立計算）===
@@ -939,7 +939,7 @@
  *     全新後端 Sheet「顏色獵人排行榜」與 HMAC 密鑰；保留 67 獵人的四難度（格數）、雲端排行榜、捏合縮放、A4 列印、雙語、音效/音樂/語音開關。
  */
 
-const APP_VERSION = 'v5';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v5：格內文字儘量放大（多邊形 r*1.1→1.35/cap 9→11、圓格 c.r*0.62→0.82/cap 14→16）＋字重 700→800 加粗強調；英文長字以較強縮放(3→2.6/len)防橫向溢出；切語言時依新字數重算字級(fsBase)。v4：玩法改成「看文字的顏色」(inkKey)——聽語音念色→點出「文字顏色」就是該色的格(字寫什麼別管)→底色補滿成那個顏色→全部對上過關；點對時不再跳成功 toast(HUD 只用於按錯提醒)。v3：開局每格白底＋文字顏色≠字義(Stroop)→點文字寫該色的格(舊版按字義)；修正失焦時背景音樂未暫停
+const APP_VERSION = 'v6';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v6：點對的格子改用「正確鮮明色」(colorInk)補滿，不再用淡粉 hex（修正辨識紅卻變粉/灰白的問題），文字色依新底色明暗重算。v5：格內文字儘量放大（多邊形 r*1.1→1.35/cap 9→11、圓格 c.r*0.62→0.82/cap 14→16）＋字重 700→800 加粗強調；英文長字以較強縮放(3→2.6/len)防橫向溢出；切語言時依新字數重算字級(fsBase)。v4：玩法改成「看文字的顏色」(inkKey)——聽語音念色→點出「文字顏色」就是該色的格(字寫什麼別管)→底色補滿成那個顏色→全部對上過關；點對時不再跳成功 toast(HUD 只用於按錯提醒)。v3：開局每格白底＋文字顏色≠字義(Stroop)→點文字寫該色的格(舊版按字義)；修正失焦時背景音樂未暫停
 const W = 210, H = 297;     // A4 mm
 // 總格數（圓形 + 多邊形）：新手 25 格(1-25)、簡單 50 格(1-50)、普通 75 格(1-75)、困難 100 格(1-100)。
 // 新手/簡單模式格子更大更好點，手機族群尤其受用；難度記在 localStorage，重進沿用。
@@ -2078,8 +2078,8 @@ const Music = {
 // 規則（v4）：棋盤每格開局都是「白底」，每格有一個「文字（顏色名）」，文字顏色故意≠字義（Stroop）；
 //       語音唸出目標顏色詞，玩家要看「文字的顏色」、最快點出「文字顏色＝念出該色」的格（看顏色、別管字寫什麼），
 //       點對後白底補滿成「該顏色（inkKey）」；把全部格子都對上即過關，點錯扣 1 條命，錯 3 次結束。
-// 對上後填滿用「柔和淡粉色系」（淺色 → 文字一律深色，淺底深字清楚可讀）；開局文字用鮮明 ink 色（白底可讀）。
-// hex＝對上後填滿格子的淡粉柔和底色；ink＝開局時「文字」描繪用的鮮明色（白底上清楚可讀，且故意與字義不同＝Stroop 干擾）。
+// v6：對上後填滿改用「正確鮮明色」(ink)，辨識什麼色就補成什麼色（紅＝正紅，不再變淡粉/灰白）；文字色依底色明暗自動切深/淺。
+// ink＝開局「文字」描繪用的鮮明色（白底可讀，故意與字義不同＝Stroop 干擾），對上後也用它填滿格子；hex＝舊版淡粉底色，保留供向後相容（inkFor 仍引用）。
 const COLORS = [
   { key: 'red',    hex: '#f29ca3', ink: '#e11d48', zh: '紅', en: 'Red' },
   { key: 'orange', hex: '#f7c193', ink: '#ea580c', zh: '橙', en: 'Orange' },
@@ -2098,13 +2098,15 @@ function colorHex(key) { return (COLOR_BY_KEY[key] || {}).hex || '#e5e7eb'; }
 // 文字描繪色（鮮明、白底可讀）；用於開局 Stroop 文字。
 function colorInk(key) { return (COLOR_BY_KEY[key] || {}).ink || '#111827'; }
 function colorWord(key) { const c = COLOR_BY_KEY[key]; return c ? (currentLang === 'zh' ? c.zh : c.en) : '?'; }
-// 字色依底色明暗自動切換（深底白字、亮底黑字）——確保「文字」本身一定看得清，被測的是「底色」。
-function inkFor(key) {
-  const hex = colorHex(key).replace('#', '');
+// 依任意底色明暗自動挑可讀文字色（深底白字、亮底黑字）。
+function contrastText(hexColor) {
+  const hex = String(hexColor).replace('#', '');
   const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
   const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return lum < 0.58 ? '#ffffff' : '#111827';
 }
+// 字色依底色明暗自動切換（深底白字、亮底黑字）——確保「文字」本身一定看得清，被測的是「底色」。
+function inkFor(key) { return contrastText(colorHex(key)); }
 // 排行榜依難度分開存：簡單(1–50)、普通(1–75)、困難(1–100) 各一份、各取前 20 名。
 const LB_KEY_BASE = 'colorhunter_leaderboard';   // 顏色獵人四難度各一份本機備援
 function lbKey(mode) { return LB_KEY_BASE + '_' + (MODE[mode] ? mode : 'normal'); }
@@ -2474,12 +2476,13 @@ function escapeHtml(s) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function markFoundTarget(r) {
-  // v4：點對的格子「對上了」——白底補滿成「文字描繪色（inkKey，即玩家辨識的那個顏色）」，文字色依新底色重算（黑/白），加綠色粗框鎖定＋文字描邊。
-  const hex = colorHex(r.inkKey);
-  r.shape.setAttribute('fill', hex);
-  r.shape.dataset.baseFill = hex;
-  r.baseFill = hex;
-  const ink = inkFor(r.inkKey);
+  // v6：點對的格子「對上了」——白底補滿成「文字描繪色（inkKey，即玩家辨識的那個正確顏色）」。
+  // 改用鮮明 ink 色（colorInk）而非淡粉 hex 色：辨識紅就補成正紅、不再變粉/灰白。文字色依新底色明暗重算。
+  const fillColor = colorInk(r.inkKey);
+  r.shape.setAttribute('fill', fillColor);
+  r.shape.dataset.baseFill = fillColor;
+  r.baseFill = fillColor;
+  const ink = contrastText(fillColor);
   r.baseInk = ink;
   r.shape.setAttribute('stroke', '#16a34a');
   r.shape.setAttribute('stroke-width', '1.6');
