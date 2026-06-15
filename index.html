@@ -919,16 +919,17 @@
 </div>
 <div class="cta" id="cta" hidden>
   <button id="startBtn"><svg class="ui-icon"><use href="#icon-target"></use></svg><span class="btn-label">開始遊戲</span></button>
-  <div class="cta-hint">開局白底、字的顏色≠字義。聽語音念的色，點出「文字」寫著那個色的格！（可捏合放大）</div>
+  <div class="cta-hint">開局白底、字的顏色≠字義。聽語音念的色，點出「文字顏色」就是那個色的格（看顏色、別管字寫什麼）！（可捏合放大）</div>
 </div>
 <script>
 'use strict';
 /*
  * 顏色獵人（Color Hunter）— 由「67 獵人」(T-161，本身 fork 自「數字獵人」T-152) 改版的找色反應遊戲。
- * 玩法（v3）：棋盤（螢幕隨機 Voronoi 格）每格「底色一開始都是白的」，每格有一個「顏色文字」，但文字的
- *       顏色故意跟字義不同（Stroop，例：字寫「藍」卻用綠色描繪）。語音隨機念出一個顏色詞，玩家要點出
- *       「文字寫著那個詞」的格子（別被字的顏色騙了）；點對後該格白底就補滿成跟字義一樣的顏色（對上了、
- *       鎖綠框），接著念下一個詞，直到把所有格子都對上即過關。
+ * 玩法（v4）：棋盤（螢幕隨機 Voronoi 格）每格「底色一開始都是白的」，每格有一個「顏色文字」，但文字的
+ *       顏色故意跟字義不同（Stroop，例：字寫「藍」卻用紅色描繪）。語音隨機念出一個顏色詞，玩家要看「文字
+ *       的顏色」、點出「文字顏色＝念出那個色」的格子（看顏色、別管字寫什麼）；點對後該格白底就補滿成那個
+ *       顏色（對上了、鎖綠框），接著念下一個色，直到把所有格子都對上即過關。點對時不跳成功提示，HUD（toast）
+ *       只在點錯時當提醒。（v3 舊玩法是反過來：點「文字寫著該詞」的格＝按字義。）
  *       點錯（文字不是念出的那個色）扣命，錯 3 次結束；把全部格子對上的用時越短排名越前。配色為淡粉柔和色系。
  * 版面生成沿用數字獵人：圓形格 + Voronoi 切割、群聚+均勻種子混合、細長格文字沿長軸旋轉、viewBox 以 mm 為單位（列印即 A4）。
  *
@@ -938,7 +939,7 @@
  *     全新後端 Sheet「顏色獵人排行榜」與 HMAC 密鑰；保留 67 獵人的四難度（格數）、雲端排行榜、捏合縮放、A4 列印、雙語、音效/音樂/語音開關。
  */
 
-const APP_VERSION = 'v3';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v3：開局每格白底＋文字顏色≠字義(Stroop，例『藍』用綠寫)→聽語音念色→點文字寫該色的格→底色補滿成字義色→全部對上過關；修正失焦時背景音樂未暫停
+const APP_VERSION = 'v4';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v4：玩法改成「看文字的顏色」(inkKey)——聽語音念色→點出「文字顏色」就是該色的格(字寫什麼別管)→底色補滿成那個顏色→全部對上過關；點對時不再跳成功 toast(HUD 只用於按錯提醒)。v3：開局每格白底＋文字顏色≠字義(Stroop)→點文字寫該色的格(舊版按字義)；修正失焦時背景音樂未暫停
 const W = 210, H = 297;     // A4 mm
 // 總格數（圓形 + 多邊形）：新手 25 格(1-25)、簡單 50 格(1-50)、普通 75 格(1-75)、困難 100 格(1-100)。
 // 新手/簡單模式格子更大更好點，手機族群尤其受用；難度記在 localStorage，重進沿用。
@@ -973,7 +974,7 @@ const I18N = {
     zoomOut: '縮小',
     zoomReset: '回復原始大小',
     startGame: '開始遊戲',
-    ctaHint: '開局每格白底、文字顏色故意跟字義不同。聽語音念的色，點出「文字」寫著那個色的格（別被字的顏色騙了）！（可捏合放大）',
+    ctaHint: '開局每格白底、文字顏色故意跟字義不同。聽語音念的色，點出「文字顏色」就是那個色的格（看顏色、別管字寫什麼）！（可捏合放大）',
     musicOn: '背景音樂開啟',
     musicOff: '背景音樂關閉',
     soundOn: '音效開啟',
@@ -994,7 +995,7 @@ const I18N = {
     modeEasyShort: '簡單',
     modeNormalShort: '普通',
     modeHardShort: '困難',
-    wrongTap: '❌ 這格文字不是「{wrong}」（再錯 {left} 次就結束）',
+    wrongTap: '❌ 這格文字的顏色不是「{wrong}」（再錯 {left} 次就結束）',
     foundTarget: '✅ 對上 {found}/{total} 格，還剩 {remain} 格',
     remainingTargets: '剩 {remain}/{total}',
     foundStatsNone: '📊 每題耗時：尚未找到任何數字。',
@@ -1037,9 +1038,9 @@ const I18N = {
     lbTitle: '排行榜 · {mode}',
     aboutTitle: '顏色獵人 — 玩法',
     about1: '按「開始遊戲」，計時立刻開始。',
-    about2: '開局每格都是白底，文字的顏色故意跟字義不同（例：「藍」用綠色寫）。聽語音念出的顏色，點出文字寫著那個顏色的格子（別被字的顏色騙了）。',
-    about3: '點對了，那格白底就會補滿成跟字義一樣的顏色（對上了、鎖綠框）；把全部格子都對上就過關。',
-    about4: '點錯（文字不是念出的那個色）扣 1 條命，錯 3 次結束；越快全對上排名越前。',
+    about2: '開局每格都是白底，文字的顏色故意跟字義不同（例：「藍」字用紅色寫）。聽語音念出的顏色，點出「文字顏色」就是那個顏色的格子（看顏色、別管字寫什麼）。',
+    about3: '點對了，那格白底就會補滿成那個顏色（對上了、鎖綠框）；把全部格子都對上就過關。',
+    about4: '點錯（文字的顏色不是念出的那個色）扣 1 條命，錯 3 次結束；越快全對上排名越前。',
     about5: '字太小可兩指捏合放大，放大後單指拖移棋盤。',
     about6: '右上選單可查看玩法說明與音樂版權。',
     musicCredit: '背景音樂：原創柔和循環曲（為本遊戲合成，公眾領域 CC0）',
@@ -1049,8 +1050,8 @@ const I18N = {
     adConsent: '管理廣告同意',
     version: '版本 {version}',
     refreshTitle: '點我強制刷新頁面（抓最新版）',
-    startRule1: '開局白底、字的顏色≠字義。聽語音念的色，點出「文字」寫著它的格子。',
-    startRule2: '點對 → 白底補滿成字義色；把 {count} 格全對上就贏。',
+    startRule1: '開局白底、字的顏色≠字義。聽語音念的色，點出「文字顏色」就是它的格子（看顏色、別管字寫什麼）。',
+    startRule2: '點對 → 白底補滿成那個顏色；把 {count} 格全對上就贏。',
     startRule3: '有三次錯誤機會，錯 3 次結束。',
     difficultyLabel: '選擇難度（格子越多越難找）',
     howTo: '玩法說明'
@@ -1080,7 +1081,7 @@ const I18N = {
     zoomOut: 'Zoom out',
     zoomReset: 'Reset zoom',
     startGame: 'Start Game',
-    ctaHint: 'Cells start white; each word is printed in a color that does NOT match its meaning. Listen for the spoken color, then tap the cell whose WORD says it (don’t be fooled by the ink color)! Pinch to zoom.',
+    ctaHint: 'Cells start white; each word is printed in a color that does NOT match its meaning. Listen for the spoken color, then tap the cell whose INK COLOR matches it (ignore what the word says)! Pinch to zoom.',
     musicOn: 'Background music on',
     musicOff: 'Background music off',
     soundOn: 'Sound effects on',
@@ -1101,7 +1102,7 @@ const I18N = {
     modeEasyShort: 'Easy',
     modeNormalShort: 'Normal',
     modeHardShort: 'Hard',
-    wrongTap: '❌ That word isn’t “{wrong}”. Game over after {left} more mistake(s).',
+    wrongTap: '❌ That word’s color isn’t “{wrong}”. Game over after {left} more mistake(s).',
     foundTarget: '✅ Matched {found}/{total}. {remain} left.',
     remainingTargets: '{remain}/{total}',
     foundStatsNone: '📊 Per-number time: no numbers found yet.',
@@ -1144,9 +1145,9 @@ const I18N = {
     lbTitle: 'Leaderboard · {mode}',
     aboutTitle: 'Color Hunter — How to Play',
     about1: 'Tap “Start Game”; the timer starts immediately.',
-    about2: 'Every cell starts white, and each word is printed in a color that does NOT match its meaning (e.g. “Blue” drawn in green). Listen for the spoken color, then tap the cell whose word says it (don’t be fooled by the ink color).',
-    about3: 'A correct tap fills that white cell with the color its word names (locked with a green outline). Match every cell to win.',
-    about4: 'A wrong tap (word ≠ the spoken color) costs 1 life. Three mistakes end the game. Faster clears rank higher.',
+    about2: 'Every cell starts white, and each word is printed in a color that does NOT match its meaning (e.g. “Blue” drawn in red). Listen for the spoken color, then tap the cell whose ink color matches it (go by the color, not the word).',
+    about3: 'A correct tap fills that white cell with that color (locked with a green outline). Match every cell to win.',
+    about4: 'A wrong tap (ink color ≠ the spoken color) costs 1 life. Three mistakes end the game. Faster clears rank higher.',
     about5: 'Pinch to zoom when numbers are small, then drag the board with one finger.',
     about6: 'Use the top menu to view instructions and music credits.',
     musicCredit: 'Music: original soft looping tune (synthesized for this game, public domain CC0)',
@@ -1156,7 +1157,7 @@ const I18N = {
     adConsent: 'Manage ad consent',
     version: 'Version {version}',
     refreshTitle: 'Force refresh and load the latest version',
-    startRule1: 'Cells start white; ink color ≠ meaning. Listen for the spoken color, then tap the cell whose word says it.',
+    startRule1: 'Cells start white; ink color ≠ meaning. Listen for the spoken color, then tap the cell drawn in that color (go by color, not the word).',
     startRule2: 'Correct tap fills the white cell with that color. Match all {count} cells to win.',
     startRule3: 'Three mistakes and the game is over.',
     difficultyLabel: 'Choose difficulty (more cells = harder)',
@@ -2065,9 +2066,9 @@ const Music = {
 };
 
 // ================= 遊戲模式「顏色獵人」 =================
-// 規則（v3）：棋盤每格開局都是「白底」，每格有一個「文字（顏色名）」，文字顏色故意≠字義（Stroop）；
-//       語音唸出目標顏色詞，玩家要最快點出「文字寫著該詞」的格（別被字的顏色騙），點對後白底補滿成字義色；
-//       把全部格子都對上即過關，點錯扣 1 條命，錯 3 次結束。
+// 規則（v4）：棋盤每格開局都是「白底」，每格有一個「文字（顏色名）」，文字顏色故意≠字義（Stroop）；
+//       語音唸出目標顏色詞，玩家要看「文字的顏色」、最快點出「文字顏色＝念出該色」的格（看顏色、別管字寫什麼），
+//       點對後白底補滿成「該顏色（inkKey）」；把全部格子都對上即過關，點錯扣 1 條命，錯 3 次結束。
 // 對上後填滿用「柔和淡粉色系」（淺色 → 文字一律深色，淺底深字清楚可讀）；開局文字用鮮明 ink 色（白底可讀）。
 // hex＝對上後填滿格子的淡粉柔和底色；ink＝開局時「文字」描繪用的鮮明色（白底上清楚可讀，且故意與字義不同＝Stroop 干擾）。
 const COLORS = [
@@ -2464,12 +2465,12 @@ function escapeHtml(s) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 function markFoundTarget(r) {
-  // v3：點對的格子「對上了」——白底補滿成跟字義相同的顏色，文字色依新底色重算（黑/白），加綠色粗框鎖定＋文字描邊。
-  const hex = colorHex(r.wordKey);
+  // v4：點對的格子「對上了」——白底補滿成「文字描繪色（inkKey，即玩家辨識的那個顏色）」，文字色依新底色重算（黑/白），加綠色粗框鎖定＋文字描邊。
+  const hex = colorHex(r.inkKey);
   r.shape.setAttribute('fill', hex);
   r.shape.dataset.baseFill = hex;
   r.baseFill = hex;
-  const ink = inkFor(r.wordKey);
+  const ink = inkFor(r.inkKey);
   r.baseInk = ink;
   r.shape.setAttribute('stroke', '#16a34a');
   r.shape.setAttribute('stroke-width', '1.6');
@@ -2525,12 +2526,12 @@ const Game = {
     this.nextWord();              // 選出第一個目標顏色詞、HUD 顯示並語音念出
     Music.play();
   },
-  // 從「還沒對上的格子」裡挑一個顏色詞當下一個目標：HUD 顯示＋語音念出；盡量不連續念同一個詞（除非只剩它）。
+  // v4：從「還沒對上的格子」裡挑一個「文字描繪色（inkKey）」當下一個目標：HUD 顯示＋語音念出；盡量不連續念同一個詞（除非只剩它）。
   nextWord() {
     const seen = {};
     const remain = [];
     for (const r of regions) {
-      if (!r.found && !seen[r.wordKey]) { seen[r.wordKey] = 1; remain.push(r.wordKey); }
+      if (!r.found && !seen[r.inkKey]) { seen[r.inkKey] = 1; remain.push(r.inkKey); }
     }
     if (!remain.length) { this.target = null; this.updateTargetDisplay(); return false; }
     let pool = remain;
@@ -2600,24 +2601,19 @@ const Game = {
   tap(r, opts) {
     if (!this.active || this.paused || r.found) return;
     if (!(opts && opts.force) && Zoom.suppressed()) return;         // 拖移/捏合手勢結尾不算點擊
-    if (this.target && r.wordKey === this.target) { // 點到「文字＝目前念出的顏色詞」→ 對上：底色補成跟文字一樣、鎖定
+    if (this.target && r.inkKey === this.target) {  // v4：點到「文字的顏色＝目前念出的色」→ 對上：底色補成那個顏色、鎖定
       this.found++;
       r.found = true;
       markFoundTarget(r);
       Sound.correct();
       this.updateHud();
+      hideToast();                                  // v4：點對「不要 HUD 跑出來」——立即收掉錯誤提示，對的時候畫面乾淨
       if (this.found >= this.targetTotal) {         // 全部格子都對上 → 過關
-        hideToast();
         this.win();
       } else {
-        this.nextWord();                            // 念下一個顏色詞
-        showToast(t('foundTarget', {
-          found: this.found,
-          total: this.targetTotal,
-          remain: this.targetsRemaining()
-        }), 'ok');
+        this.nextWord();                            // 念下一個顏色（不顯示成功 toast）
       }
-    } else {                                         // 點到文字不是目前念出的詞 → 扣命
+    } else {                                         // 點到文字顏色不是目前念出的色 → 扣命
       this.errors++;
       Sound.wrong();
       flashWrong(r);
