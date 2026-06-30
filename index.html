@@ -213,6 +213,7 @@
     touch-action: pan-x pan-y;   /* 67-v1：允許水平平移，否則 pan-y 會限制子元素只能垂直、排行榜寬表格往右滑被擋 */
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+    overflow-anchor: none;       /* v19（移植 T-152 v75）：關閉捲動錨定。排行榜表格是非同步填入(loading→20列)，瀏覽器 scroll anchoring 會在表格撐高時自動往下捲、把標題/頁籤推出畫面上方——這正是 scrollTop=0 仍無效的主因（歸零發生在表格注入「之前」）。 */
   }
   .overlay .panel::before {
     content: "";
@@ -262,6 +263,40 @@
   }
   .panel button.secondary { background: #e5e7eb; color: #111827; }
   .panel button:active { transform: translateY(2px); box-shadow: 0 2px 0 #111827; }
+  /* ---- 新手教學遮罩（coach marks，移植自 T-152 數字獵人 v80） ---- */
+  /* z-index 必須高於所有互動元件（語言鈕 .langbtn、topbar、HUD…），否則該元件會浮在暗罩之上、教學期間仍可點按——違反「除聚光孔外一律不可點」。 */
+  .coach { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+  .coach .coach-mask {
+    position: fixed; background: rgba(15,23,42,.78);
+    pointer-events: auto;   /* 暗罩攔截點擊：聚光孔以外的地方一律點不到，逼使用者只能照教學點 */
+    transition: all .18s ease;
+  }
+  .coach .coach-ring {
+    position: fixed; border: 3px solid #fbbf24; border-radius: 10px;
+    box-shadow: 0 0 0 3px rgba(251,191,36,.35), 0 0 18px 4px rgba(251,191,36,.55);
+    pointer-events: none; transition: all .18s ease;
+    animation: coachPulse 1.3s ease-in-out infinite;
+  }
+  @keyframes coachPulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(251,191,36,.35), 0 0 14px 2px rgba(251,191,36,.45); }
+    50%      { box-shadow: 0 0 0 5px rgba(251,191,36,.5),  0 0 22px 7px rgba(251,191,36,.7); }
+  }
+  .coach .coach-bubble {
+    position: fixed; pointer-events: auto;
+    background: #fffaf0; color: #172033; border: 2px solid #111827; border-radius: 14px;
+    padding: 16px 18px; width: min(86vw, 340px);
+    box-shadow: 0 10px 0 rgba(17,24,39,.32), 0 18px 44px rgba(0,0,0,.5);
+    z-index: 61;
+  }
+  .coach .coach-title { margin: 0 0 8px; font-size: 19px; font-weight: 800; }
+  .coach .coach-text { margin: 0; color: #374151; line-height: 1.6; font-size: 15px; }
+  .coach .coach-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; justify-content: flex-end; }
+  .coach .coach-actions button {
+    font-size: 15px; font-weight: 800; padding: 9px 18px; border: 1px solid #111827; border-radius: 999px;
+    cursor: pointer; background: #f59e0b; color: #1f2937; box-shadow: 0 4px 0 #111827; flex: none;
+  }
+  .coach .coach-actions button.secondary { background: #e5e7eb; color: #111827; }
+  .coach .coach-actions button:active { transform: translateY(2px); box-shadow: 0 2px 0 #111827; }
   .panel input[type=text] {
     font-size: 15px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; width: 100%;
   }
@@ -924,6 +959,19 @@
   <button id="startBtn"><svg class="ui-icon"><use href="#icon-target"></use></svg><span class="btn-label">開始遊戲</span></button>
   <div class="cta-hint">開局白底、字的顏色≠字義。聽語音念的色，點出「文字顏色」就是那個色的格（看顏色、別管字寫什麼）！（可捏合放大）</div>
 </div>
+<!-- 新手教學遮罩：4 塊暗罩圍出一個透明「聚光孔」(只露出當前要學的元素並可點)，配上說明氣泡 -->
+<div class="coach" id="coach" hidden>
+  <div class="coach-mask" id="coachTop"></div>
+  <div class="coach-mask" id="coachBottom"></div>
+  <div class="coach-mask" id="coachLeft"></div>
+  <div class="coach-mask" id="coachRight"></div>
+  <div class="coach-ring" id="coachRing" hidden></div>
+  <div class="coach-bubble" id="coachBubble">
+    <h3 class="coach-title" id="coachTitle" hidden></h3>
+    <p class="coach-text" id="coachText"></p>
+    <div class="coach-actions" id="coachActions"></div>
+  </div>
+</div>
 <script>
 'use strict';
 /*
@@ -942,7 +990,7 @@
  *     全新後端 Sheet「顏色獵人排行榜」與 HMAC 密鑰；保留 67 獵人的四難度（格數）、雲端排行榜、捏合縮放、A4 列印、雙語、音效/音樂/語音開關。
  */
 
-const APP_VERSION = 'v18';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v18：修「點錯提示框不見」——提示框原在 HUD 下方，HUD 移底部後被推出畫面外，改到 HUD 上方。v17：手機修正——縮放鈕被 @media 壓回底部擋住 HUD 目標，改抬高到 HUD 之上 safe-area+70px。v16：直式 HUD 由頂部移到畫面底部（position:fixed bottom），避免遮住遊戲區；盤面本有 100px 下邊距、縮放鈕抬高 bottom:78px 避免被蓋；橫式左側欄不變。v15：語言鈕改回 T-152 浮動做法（直式浮動右上、橫式收進HUD），不再與放棄鈕同列/擋放棄。v14：修正遊戲中語言切換鈕（浮動 .langbtn，fixed 右上）會在棋盤往下捲、sticky HUD 上推到 top:0 時蓋住「放棄」鈕——改為遊戲中一律隱藏浮動語言鈕、改顯示 HUD 內的 #hudLangBtn（與暫停/放棄同列排列，直式橫式皆然，原本只有橫式這樣做）。v13：紫色底（#7c3aed）的按鈕／開關文字一律改白色（原 #1f2937 深灰），加強對比（.panel button、.diff-seg .diff.on、音效/音樂/報數開關 on 態、.cta button、暫停卡 resumeBtn）。v12：每格文字底下加一個「該文字 ink 色」的圓圈把字包起來（黃字＝黃底圓圈）、文字改 ink 色字＋白色外框（白邊）疊在同色圓圈上仍清晰（取代 v8 白底深色外框）；圓圈半徑依字級／字數估算貼合文字、上限為格子內切半徑不溢出、切語言時同步重算。v11：粉色與紅色太接近 → 淘汰「粉 Pink」改為「青 Cyan」(ink #0891b2、補滿 hex #a3dde3，填補綠↔藍色相空檔且與紅明顯區隔)；「棕 Brown」中文字改顯示「咖」(英文仍 Brown，ink/hex 不變)。v10：格內文字一律正向不旋轉（移除細長格沿軸旋轉、字級改一律以內切半徑 r 為準防溢出，用戶要求正常文字角度）。v9：報色語音改非同步 setTimeout(0)+650ms 節流+播放中略過、不再每次 cancel，修手機/WebView 快速連點卡頓。v8：黃色 ink 改正黃 #FFD400（原 #ca8a04 偏褐）；左上角 HUD 目標色詞偏暗（如黑）時補白色外框防隱沒於深色 HUD 條；格內亮色文字（正黃）白底加深色細外框防看不清。v7：左上角 HUD 目標顏色詞改用「該顏色本身」顯示（colorInk），文字色與其代表的顏色一致（取代固定紫色），語言切換時同步。v6：點對的格子改用「正確鮮明色」(colorInk)補滿，不再用淡粉 hex（修正辨識紅卻變粉/灰白的問題），文字色依新底色明暗重算。v5：格內文字儘量放大（多邊形 r*1.1→1.35/cap 9→11、圓格 c.r*0.62→0.82/cap 14→16）＋字重 700→800 加粗強調；英文長字以較強縮放(3→2.6/len)防橫向溢出；切語言時依新字數重算字級(fsBase)。v4：玩法改成「看文字的顏色」(inkKey)——聽語音念色→點出「文字顏色」就是該色的格(字寫什麼別管)→底色補滿成那個顏色→全部對上過關；點對時不再跳成功 toast(HUD 只用於按錯提醒)。v3：開局每格白底＋文字顏色≠字義(Stroop)→點文字寫該色的格(舊版按字義)；修正失焦時背景音樂未暫停
+const APP_VERSION = 'v19';  // 顏色獵人自身版本（與 67 獵人各自獨立計算）；v19：移植數字獵人(T-152)三項——①新手教學：首次開啟用 4 塊暗罩圍出「聚光孔」逐步引導(目標色在哪→親手點 2~3 個「文字顏色＝該色」的格→愛心/計時器/暫停放棄/捏合縮放)，文案特別強調「看文字的顏色、別管字義」；玩法說明面板加「新手教學」鈕可手動重播；教學期間棋盤點擊不扣命/不結束(暗罩純視覺、Game.tap 為權威)、縮放後同步重定位聚光孔。②排行榜捲頂修正：.panel overflow-anchor:none＋showPanel/表格注入後 scrollTop=0，徹底修「排行榜沒捲到最上方」。③（HUD safe-area／底部 HUD 等畫面調整 v16-v18 已具備）。v18：修「點錯提示框不見」——提示框原在 HUD 下方，HUD 移底部後被推出畫面外，改到 HUD 上方。v17：手機修正——縮放鈕被 @media 壓回底部擋住 HUD 目標，改抬高到 HUD 之上 safe-area+70px。v16：直式 HUD 由頂部移到畫面底部（position:fixed bottom），避免遮住遊戲區；盤面本有 100px 下邊距、縮放鈕抬高 bottom:78px 避免被蓋；橫式左側欄不變。v15：語言鈕改回 T-152 浮動做法（直式浮動右上、橫式收進HUD），不再與放棄鈕同列/擋放棄。v14：修正遊戲中語言切換鈕（浮動 .langbtn，fixed 右上）會在棋盤往下捲、sticky HUD 上推到 top:0 時蓋住「放棄」鈕——改為遊戲中一律隱藏浮動語言鈕、改顯示 HUD 內的 #hudLangBtn（與暫停/放棄同列排列，直式橫式皆然，原本只有橫式這樣做）。v13：紫色底（#7c3aed）的按鈕／開關文字一律改白色（原 #1f2937 深灰），加強對比（.panel button、.diff-seg .diff.on、音效/音樂/報數開關 on 態、.cta button、暫停卡 resumeBtn）。v12：每格文字底下加一個「該文字 ink 色」的圓圈把字包起來（黃字＝黃底圓圈）、文字改 ink 色字＋白色外框（白邊）疊在同色圓圈上仍清晰（取代 v8 白底深色外框）；圓圈半徑依字級／字數估算貼合文字、上限為格子內切半徑不溢出、切語言時同步重算。v11：粉色與紅色太接近 → 淘汰「粉 Pink」改為「青 Cyan」(ink #0891b2、補滿 hex #a3dde3，填補綠↔藍色相空檔且與紅明顯區隔)；「棕 Brown」中文字改顯示「咖」(英文仍 Brown，ink/hex 不變)。v10：格內文字一律正向不旋轉（移除細長格沿軸旋轉、字級改一律以內切半徑 r 為準防溢出，用戶要求正常文字角度）。v9：報色語音改非同步 setTimeout(0)+650ms 節流+播放中略過、不再每次 cancel，修手機/WebView 快速連點卡頓。v8：黃色 ink 改正黃 #FFD400（原 #ca8a04 偏褐）；左上角 HUD 目標色詞偏暗（如黑）時補白色外框防隱沒於深色 HUD 條；格內亮色文字（正黃）白底加深色細外框防看不清。v7：左上角 HUD 目標顏色詞改用「該顏色本身」顯示（colorInk），文字色與其代表的顏色一致（取代固定紫色），語言切換時同步。v6：點對的格子改用「正確鮮明色」(colorInk)補滿，不再用淡粉 hex（修正辨識紅卻變粉/灰白的問題），文字色依新底色明暗重算。v5：格內文字儘量放大（多邊形 r*1.1→1.35/cap 9→11、圓格 c.r*0.62→0.82/cap 14→16）＋字重 700→800 加粗強調；英文長字以較強縮放(3→2.6/len)防橫向溢出；切語言時依新字數重算字級(fsBase)。v4：玩法改成「看文字的顏色」(inkKey)——聽語音念色→點出「文字顏色」就是該色的格(字寫什麼別管)→底色補滿成那個顏色→全部對上過關；點對時不再跳成功 toast(HUD 只用於按錯提醒)。v3：開局每格白底＋文字顏色≠字義(Stroop)→點文字寫該色的格(舊版按字義)；修正失焦時背景音樂未暫停
 const W = 210, H = 297;     // A4 mm
 // 總格數（圓形 + 多邊形）：新手 25 格(1-25)、簡單 50 格(1-50)、普通 75 格(1-75)、困難 100 格(1-100)。
 // 新手/簡單模式格子更大更好點，手機族群尤其受用；難度記在 localStorage，重進沿用。
@@ -1057,7 +1105,22 @@ const I18N = {
     startRule2: '點對 → 白底補滿成那個顏色；把 {count} 格全對上就贏。',
     startRule3: '有三次錯誤機會，錯 3 次結束。',
     difficultyLabel: '選擇難度（格子越多越難找）',
-    howTo: '玩法說明'
+    howTo: '玩法說明',
+    tutGreetTitle: '歡迎來到顏色獵人！',
+    tutGreetBody: '玩法重點只有一個：看「文字的顏色」，別管字寫什麼！螢幕會念出一個顏色，你要找「用這個顏色寫出來的字」點一下。先用一局教學帶你玩過一次！',
+    tutStart: '開始教學',
+    tutSkip: '略過教學',
+    tutTargetTip: '看這裡 ☝️ 這是「現在要找的顏色」，目前是「{n}」，語音也會念出來。',
+    tutFindTip: '在棋盤上找一個「用 {n} 色寫的字」（別管它寫的是什麼字），點它一下！',
+    tutLivesTip: '右邊這三顆愛心是你的命。點錯（文字顏色不對）會扣 1 顆，扣光 3 顆遊戲就結束，看清楚「文字的顏色」再點喔。',
+    tutTimerTip: '這是計時器，會記錄你花的時間。把全部格子都對上後，用時越短排名越前面！',
+    tutControlsTip: '需要時可以按「暫停」休息，或按「放棄」離開這一局。',
+    tutZoomTip: '格子太小看不清顏色時，用兩根手指在棋盤上「捏合」就能放大；放大後用單指拖移移動棋盤。也可以按這裡的 ➕ ➖ 鈕縮放。',
+    tutDoneTitle: '教學完成 🎉',
+    tutDoneBody: '你已經學會怎麼玩了！記住：看文字的顏色。現在選個難度，開始正式挑戰排行榜吧。',
+    tutDoneBtn: '開始遊戲',
+    tutNext: '下一步',
+    tutReplay: '新手教學'
   },
   en: {
     htmlLang: 'en',
@@ -1164,7 +1227,22 @@ const I18N = {
     startRule2: 'Correct tap fills the white cell with that color. Match all {count} cells to win.',
     startRule3: 'Three mistakes and the game is over.',
     difficultyLabel: 'Choose difficulty (more cells = harder)',
-    howTo: 'How to Play'
+    howTo: 'How to Play',
+    tutGreetTitle: 'Welcome to Color Hunter!',
+    tutGreetBody: 'One rule matters: look at the COLOR of the text, not what it says! The screen calls out a color, and you tap a word that is drawn in that color. Let us walk through one round together first!',
+    tutStart: 'Start Tutorial',
+    tutSkip: 'Skip',
+    tutTargetTip: 'Look here ☝️ This is the color to find right now: "{n}". It is also spoken aloud.',
+    tutFindTip: 'Find a word drawn in {n} on the board (ignore what it spells) and tap it!',
+    tutLivesTip: 'These three hearts are your lives. A wrong tap (wrong text color) costs one, and losing all three ends the game — so check the text color carefully.',
+    tutTimerTip: 'This is the timer. Match every cell — the faster you finish, the higher you rank!',
+    tutControlsTip: 'You can Pause to take a break, or Quit to leave the round anytime.',
+    tutZoomTip: 'If a cell is too small to see the color, pinch with two fingers on the board to zoom in, then drag with one finger. You can also use these + / - buttons.',
+    tutDoneTitle: 'Tutorial Complete 🎉',
+    tutDoneBody: 'You have got it! Remember: go by the text color. Pick a difficulty and start your real run for the leaderboard.',
+    tutDoneBtn: 'Play',
+    tutNext: 'Next',
+    tutReplay: 'Tutorial'
   }
 };
 
@@ -1877,6 +1955,8 @@ const Zoom = {
     document.getElementById('paper').setAttribute('viewBox',
       this.vx.toFixed(3) + ' ' + this.vy.toFixed(3) + ' ' +
       (W / this.scale).toFixed(3) + ' ' + (H / this.scale).toFixed(3));
+    // 縮放/拖移會改變格子在螢幕上的位置；教學進行中要同步重定位聚光孔（修「縮放後目標格被暗罩遮住」）。
+    if (typeof Tutorial !== 'undefined') Tutorial.reposition();
   },
   clamp() {
     this.scale = Math.min(this.MAXS, Math.max(1, this.scale));
@@ -2502,6 +2582,9 @@ function showPanel(html, panelClass = '') {
   const panel = document.getElementById('panel');
   panel.className = 'panel' + (panelClass ? ' ' + panelClass : '');
   panel.innerHTML = html;
+  // v19（移植 T-152 v74）：每次重畫面板都把垂直捲動歸零。否則上次把排行榜往下拉過、重玩一局又沒上榜時，
+  //   面板殘留的 scrollTop 會讓再次跳出的排行榜停在下方。配合 .panel{overflow-anchor:none} 與表格注入後再次歸零（見 showLeaderboard）。
+  panel.scrollTop = 0;
   document.body.classList.add('modal-open');
   document.getElementById('overlay').hidden = false;
 }
@@ -2683,6 +2766,14 @@ const Game = {
   targetRegion() { return regions.find(r => r.isTarget && !r.found); },
   tap(r, opts) {
     if (!this.active || this.paused || r.found) return;
+    // 教學期間棋盤點擊一律不可扣命/結束遊戲（暗罩只是視覺引導，遊戲邏輯才是權威）：
+    //  - 非「引導點擊」步驟（講解目標色/愛心/計時器/控制鈕/縮放）：棋盤任何點擊一律忽略，
+    //    杜絕暗罩過場或穿透造成的亂點扣命、教學中途 game over。
+    //  - 「引導點擊」步驟：只接受「文字顏色＝目前目標色」的格；點到別的格靜默忽略、不扣命。
+    if (typeof Tutorial !== 'undefined' && Tutorial.active) {
+      if (!Tutorial.expectingTap) return;
+      if (r.inkKey !== this.target) return;
+    }
     if (!(opts && opts.force) && Zoom.suppressed()) return;         // 拖移/捏合手勢結尾不算點擊
     if (this.target && r.inkKey === this.target) {  // v4：點到「文字的顏色＝目前念出的色」→ 對上：底色補成那個顏色、鎖定
       this.found++;
@@ -2696,6 +2787,7 @@ const Game = {
       } else {
         this.nextWord();                            // 念下一個顏色（不顯示成功 toast）
       }
+      if (typeof Tutorial !== 'undefined' && Tutorial.active) Tutorial.onFound();   // 教學：點對一格就推進到下一步
     } else {                                         // 點到文字顏色不是目前念出的色 → 扣命
       this.errors++;
       Sound.wrong();
@@ -2926,15 +3018,20 @@ function showLeaderboard(options) {
         : '<button class="secondary" onclick="hideOverlay()">' + buttonHtml('close', t('close')) + '</button>') +
     '</div>');
   // 雲端為主、本機備援：抓不到雲端（離線/被擋）就顯示本機紀錄並標註。
+  // v19（移植 T-152 v75）：表格非同步填入「之後」再把面板捲回最上方一次。光靠 showPanel 的 scrollTop=0（注入前）不夠，
+  //   因為撐高發生在這個 then 裡；配合 .panel{overflow-anchor:none} 雙保險確保標題/頁籤永遠在最上方。
+  const scrollPanelTop = () => { const p = document.getElementById('panel'); if (p) p.scrollTop = 0; };
   const seq = ++showLeaderboard._seq;
   CloudLb.top(mode).then(top => {
     if (seq !== showLeaderboard._seq) return;          // 已切到別的分頁/畫面就不要蓋
     const el = document.getElementById('lbTable');
     if (el) el.innerHTML = lbTableHtml(top);
+    scrollPanelTop();
   }).catch(() => {
     if (seq !== showLeaderboard._seq) return;
     const el = document.getElementById('lbTable');
     if (el) el.innerHTML = '<p class="lb-note">' + t('cloudOffline') + '</p>' + lbTableHtml(loadLb(mode));
+    scrollPanelTop();
   });
 }
 showLeaderboard._seq = 0;
@@ -2974,7 +3071,8 @@ function showAbout(origin) {
     (isInApp() ? ' · <a href="#" onclick="manageAdConsent();return false;">' + t('adConsent') + '</a>' : '') +
     '</div>' +
     '<div class="credit ver" onclick="forceRefresh()" title="' + t('refreshTitle') + '">' + t('version', { version: APP_VERSION }) + '</div>' +
-    '<div class="btn-row"><button class="secondary" onclick="' + closeAction + '">' + buttonHtml('close', closeLabel) + '</button></div>');
+    '<div class="btn-row"><button onclick="Tutorial.startManual()">' + buttonHtml('info', t('tutReplay')) + '</button>' +
+    '<button class="secondary" onclick="' + closeAction + '">' + buttonHtml('close', closeLabel) + '</button></div>');
 }
 // 是否在原生 App 內（有 JS↔Swift 橋接）；網頁版回傳 false，不顯示「管理廣告同意」。
 function isInApp() {
@@ -3180,7 +3278,191 @@ document.addEventListener('click', e => {
   const m = document.getElementById('menu');
   if (!m.hidden && !m.contains(e.target)) toggleMenu(false);
 });
-showStartDialog();
+// ================= 新手教學（首次下載／首次開啟才自動跑；移植自 T-152 數字獵人 v80） =================
+// 用 4 塊暗罩圍出一個透明「聚光孔」逐步聚焦：先教「現在要找的顏色」在哪→引導親手點出 2~3 個「文字顏色＝該色」的格→
+// 再依序講解愛心(命)、計時器、暫停/放棄、縮放，最後回開始畫面讓使用者正式挑戰。完成或略過後寫旗標，不再自動跳。
+// 顏色獵人玩法核心＝看「文字的顏色」(inkKey) 而非字義，教學文案特別強調這點。
+const Tutorial = {
+  active: false,
+  expectingTap: false,        // 是否處於「引導使用者親手點格子」階段
+  GUIDED_FINDS: 3,            // 親手引導點幾個格
+  _rectFn: null,             // 回傳目前聚光孔矩形的函式（null = 全螢幕暗罩、氣泡置中）
+  el(id) { return document.getElementById(id); },
+  isDone() { try { return localStorage.getItem('colorhunter_tutorialDone') === '1'; } catch (e) { return true; } },
+  markDone() { try { localStorage.setItem('colorhunter_tutorialDone', '1'); } catch (e) {} },
+
+  // 開機呼叫：沒玩過教學就接手畫面跑教學，回傳 true；否則回 false 讓開始畫面照常顯示。
+  maybeStart() {
+    if (this.isDone()) return false;
+    this.greet();
+    return true;
+  },
+  // 由「玩法說明」面板的新手教學按鈕手動觸發：無視 isDone 旗標，收起說明面板後重跑一次教學。
+  startManual() {
+    hideOverlay();            // 收起玩法說明面板，避免疊在教學遮罩底下
+    this.greet();             // 顯示教學歡迎氣泡（開始教學／略過）
+  },
+  greet() {
+    this.showCoach();
+    this.spotlight(null, t('tutGreetTitle'), t('tutGreetBody'), [
+      { label: t('tutSkip'), secondary: true, onClick: () => this.skip() },
+      { label: t('tutStart'), onClick: () => this.beginGame() }
+    ]);
+  },
+  skip() {
+    this.markDone();
+    this.active = false; this.expectingTap = false;
+    this.hideCoach();
+    showStartDialog();
+  },
+  beginGame() {
+    this.active = true;
+    hideOverlay();
+    Game.start('beginner');         // 開一局新手教學局（最少格、最好點）
+    this.showCoach();
+    this.stepTargetTip();
+  },
+  // 目前要找的格：文字顏色(inkKey)＝目前目標色、且尚未對上的任一格。
+  targetCell() { return regions.find(r => !r.found && r.inkKey === Game.target); },
+  targetColorWord() { return Game.target ? colorWord(Game.target) : ''; },
+  stepTargetTip() {
+    this.expectingTap = false;
+    this.spotlight(() => this.rectOf('targetNum'), null, t('tutTargetTip', { n: this.targetColorWord() }), [
+      { label: t('tutNext'), onClick: () => this.stepGuidedFind() }
+    ]);
+  },
+  stepGuidedFind() {
+    const r = this.targetCell();
+    if (!r || !r.shape) { this.stepLives(); return; }   // 保險：定位不到格子就跳過引導點擊
+    this.expectingTap = true;
+    this.spotlight(
+      () => { const reg = this.targetCell(); return reg && reg.shape ? reg.shape.getBoundingClientRect() : null; },
+      null, t('tutFindTip', { n: this.targetColorWord() }), []);   // 無按鈕：點對格子才前進
+  },
+  onFound() {
+    if (!this.active) return;
+    if (this.expectingTap && Game.found < this.GUIDED_FINDS && Game.found < N) {
+      this.stepGuidedFind();          // 繼續引導下一個顏色
+    } else if (this.expectingTap) {
+      this.expectingTap = false;
+      this.stepLives();
+    }
+  },
+  stepLives() {
+    this.expectingTap = false;
+    this.spotlight(() => this.rectOf('livesDisp'), null, t('tutLivesTip'), [
+      { label: t('tutNext'), onClick: () => this.stepTimer() }
+    ]);
+  },
+  stepTimer() {
+    this.spotlight(() => this.rectOf('timeDisp'), null, t('tutTimerTip'), [
+      { label: t('tutNext'), onClick: () => this.stepControls() }
+    ]);
+  },
+  stepControls() {
+    this.spotlight(() => this.unionRect(['pauseBtn', 'quitBtn']), null, t('tutControlsTip'), [
+      { label: t('tutNext'), onClick: () => this.stepZoom() }
+    ]);
+  },
+  stepZoom() {
+    this.spotlight(() => this.unionRect(['zin', 'zout', 'zreset']), null, t('tutZoomTip'), [
+      { label: t('tutNext'), onClick: () => this.stepDone() }
+    ]);
+  },
+  stepDone() {
+    this.expectingTap = false;
+    this.spotlight(null, t('tutDoneTitle'), t('tutDoneBody'), [
+      { label: t('tutDoneBtn'), onClick: () => this.complete() }
+    ]);
+  },
+  complete() {
+    this.markDone();
+    this.active = false; this.expectingTap = false;
+    this.hideCoach();
+    Game.quit();                      // 結束教學局回開始畫面，讓使用者正式挑戰排行榜
+  },
+
+  // ---- 遮罩繪製 ----
+  showCoach() { this.el('coach').hidden = false; },
+  hideCoach() { this.el('coach').hidden = true; this._rectFn = null; },
+  rectOf(id) { const e = this.el(id); return e ? e.getBoundingClientRect() : null; },
+  unionRect(ids) {
+    const rs = ids.map(id => this.el(id)).filter(Boolean).map(e => e.getBoundingClientRect()).filter(r => r.width || r.height);
+    if (!rs.length) return null;
+    const left = Math.min.apply(null, rs.map(r => r.left)), top = Math.min.apply(null, rs.map(r => r.top));
+    const right = Math.max.apply(null, rs.map(r => r.right)), bottom = Math.max.apply(null, rs.map(r => r.bottom));
+    return { left, top, right, bottom, width: right - left, height: bottom - top };
+  },
+  spotlight(rectFn, title, text, actions) {
+    this._rectFn = rectFn;            // null 或 () => rect|null
+    this.renderBubble(title, text, actions);
+    this.relayout();
+    requestAnimationFrame(() => this.relayout());   // 氣泡尺寸/版面 settle 後再定位一次
+  },
+  renderBubble(title, text, actions) {
+    const tEl = this.el('coachTitle');
+    if (title) { tEl.textContent = title; tEl.hidden = false; } else { tEl.hidden = true; }
+    this.el('coachText').textContent = text;
+    const box = this.el('coachActions');
+    box.innerHTML = '';
+    (actions || []).forEach(a => {
+      const b = document.createElement('button');
+      b.textContent = a.label;
+      if (a.secondary) b.className = 'secondary';
+      b.addEventListener('click', a.onClick);
+      box.appendChild(b);
+    });
+  },
+  relayout() { this.layout(this._rectFn ? this._rectFn() : null); },
+  reposition() { if (this.active && !this.el('coach').hidden) this.relayout(); },
+  setBox(el, x, y, w, h) {
+    el.style.left = Math.round(x) + 'px';
+    el.style.top = Math.round(y) + 'px';
+    el.style.width = Math.max(0, Math.round(w)) + 'px';
+    el.style.height = Math.max(0, Math.round(h)) + 'px';
+  },
+  layout(rect) {
+    const VW = window.innerWidth, VH = window.innerHeight;
+    const top = this.el('coachTop'), bottom = this.el('coachBottom'),
+          left = this.el('coachLeft'), right = this.el('coachRight'),
+          ring = this.el('coachRing'), bubble = this.el('coachBubble');
+    if (!rect) {                       // 全螢幕暗罩、氣泡置中
+      this.setBox(top, 0, 0, VW, VH);
+      this.setBox(bottom, 0, 0, 0, 0);
+      this.setBox(left, 0, 0, 0, 0);
+      this.setBox(right, 0, 0, 0, 0);
+      ring.hidden = true;
+      bubble.style.left = Math.round((VW - (bubble.offsetWidth || 300)) / 2) + 'px';
+      bubble.style.top = Math.round((VH - (bubble.offsetHeight || 140)) / 2) + 'px';
+      return;
+    }
+    const pad = 8;
+    // 孔的四邊先各自 round 成整數，四塊暗罩共用同一組整數邊界，相鄰邊才會「剛好對齊」，杜絕相鄰暗罩 round 後 1px 縫隙露出底下白棋盤。
+    const hx = Math.round(Math.max(0, rect.left - pad)), hy = Math.round(Math.max(0, rect.top - pad));
+    const hr = Math.round(Math.min(VW, rect.right + pad)), hb = Math.round(Math.min(VH, rect.bottom + pad));
+    const hw = hr - hx, hh = hb - hy;
+    this.setBox(top, 0, 0, VW, hy);                 // 四塊暗罩圍住聚光孔
+    this.setBox(bottom, 0, hb, VW, VH - hb);
+    // 側邊暗罩上下各多蓋 1px，與上下暗罩重疊（雙層深色肉眼無感），連 transition 過場時也不會閃出白縫。
+    this.setBox(left, 0, hy - 1, hx, hh + 2);
+    this.setBox(right, hr, hy - 1, VW - hr, hh + 2);
+    ring.hidden = false;
+    this.setBox(ring, hx, hy, hw, hh);
+    const bw = bubble.offsetWidth || 300, bh = bubble.offsetHeight || 140;
+    const bx = Math.min(Math.max(8, hx + hw / 2 - bw / 2), VW - bw - 8);
+    let by;
+    if (hb + 12 + bh <= VH - 8) by = hb + 12;             // 孔下方放得下→放下方
+    else if (hy - 12 - bh >= 8) by = hy - 12 - bh;        // 否則放上方
+    else by = Math.max(8, VH - bh - 8);                   // 都放不下→盡量貼底
+    bubble.style.left = Math.round(bx) + 'px';
+    bubble.style.top = Math.round(by) + 'px';
+  }
+};
+window.addEventListener('resize', () => Tutorial.reposition());
+window.addEventListener('scroll', () => Tutorial.reposition(), { passive: true });
+window.addEventListener('orientationchange', () => setTimeout(() => Tutorial.reposition(), 300));
+
+if (!Tutorial.maybeStart()) showStartDialog();   // 首次開啟跑教學，其餘照常顯示開始畫面
 CloudLb.prefetchAll();   // 開頁就背景預抓全難度榜單，開始畫面開排行榜即秒開、切頁籤不再分批打 API
 </script>
 </body>
